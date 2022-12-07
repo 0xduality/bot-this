@@ -3,7 +3,7 @@ pragma solidity ^0.8.16;
 
 import {Script} from 'forge-std/Script.sol';
 
-import {BotThisERC721} from "src/tokens/Botthis.sol";
+import {BotThisERC721} from "src/tokens/BotThis.sol";
 
 /// @notice A very simple deployment script
 contract Deploy is Script {
