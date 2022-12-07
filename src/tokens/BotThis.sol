@@ -1,55 +1,77 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.0;
 
-contract BotThisERC721 {
+import {Owned} from "@solbase/auth/Owned.sol";
+import {ReentrancyGuard} from "@solbase/utils/ReentrancyGuard.sol";
+
+
+interface BotThisErrors {
+    error AlreadyStartedError();
+    error RevealPeriodOngoingError();
+    error BidPeriodOngoingError();
+    error InvalidSeller(address sender, address seller);
+    error InvalidAuctionIndexError(uint64 index);
+    error BidPeriodTooShortError(uint32 bidPeriod);
+    error RevealPeriodTooShortError(uint32 revealPeriod);
+    error NotInRevealPeriodError();
+    error NotInBidPeriodError();
+    error UnrevealedBidError();
+    error CannotWithdrawError();
+    error ZeroCommitmentError();
+    error InvalidStartTimeError(uint32 startTime);
+    error InvalidOpeningError(bytes21 bidHash, bytes21 commitment);
+}
+
+
+contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
 
-    event Transfer(address indexed from, address indexed to, uint256 indexed id);
-
-    event Approval(address indexed owner, address indexed spender, uint256 indexed id);
-
-    event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
 
     /*//////////////////////////////////////////////////////////////
                          METADATA STORAGE/LOGIC
     //////////////////////////////////////////////////////////////*/
 
-    string public name;
-
-    string public symbol;
-
-    function tokenURI(uint256 id) public view virtual returns (string memory)
-    {
-        return "";
+    enum Status {
+        Uninitialized,
+        Initialized,
+        Finalized,
+        Canceled
     }
 
-    /*//////////////////////////////////////////////////////////////
-                      ERC721 BALANCE/OWNER STORAGE
-    //////////////////////////////////////////////////////////////*/
-
-    mapping(uint256 => address) internal _ownerOf;
-
-    mapping(address => uint256) internal _balanceOf;
-
-    function ownerOf(uint256 id) public view virtual returns (address owner) {
-        require((owner = _ownerOf[id]) != address(0), "NOT_MINTED");
+    struct AuctionInfo{
+        uint32 startTime;
+        uint32 endOfBiddingPeriod;
+        uint32 endOfRevealPeriod;
+        uint88 reservePrice;
+        uint8  collectionSize;
+        Status status; 
+        // still 56 bits available in this slot
     }
 
-    function balanceOf(address owner) public view virtual returns (uint256) {
-        require(owner != address(0), "ZERO_ADDRESS");
-
-        return _balanceOf[owner];
+    /// @dev Representation of a sealed bid in storage. Occupies one slot.
+    /// @param commitment The hash commitment of a bid value. 
+    /// @param collateral The amount of collateral backing the bid.
+    struct SealedBid {
+        bytes21 commitment;
+        uint88 collateral;
     }
 
-    /*//////////////////////////////////////////////////////////////
-                         ERC721 APPROVAL STORAGE
-    //////////////////////////////////////////////////////////////*/
+    /// @dev Representation of a revealed bid in storage. Occupies one slot.
+    /// @param bidder  The bidder. 
+    /// @param amount amount of items asked.
+    /// @param value value actually bid (less or equal to collateral)
+    struct RevealedBid {
+        address bidder;
+        uint8   amount;
+        uint88  value;
+    }
 
-    mapping(uint256 => address) public getApproved;
-
-    mapping(address => mapping(address => bool)) public isApprovedForAll;
+    AuctionInfo public auction;
+    mapping(address => SealedBid) public sealedBids;
+    mapping(address => uint256) public payments;
+    RevealedBid[] public revealedBids;
 
     /*//////////////////////////////////////////////////////////////
                                CONSTRUCTOR
@@ -60,173 +82,60 @@ contract BotThisERC721 {
         symbol = _symbol;
     }
 
-    /*//////////////////////////////////////////////////////////////
-                              ERC721 LOGIC
-    //////////////////////////////////////////////////////////////*/
+    /// @notice Creates an auction for the given ERC721 asset with the given
+    ///         auction parameters.
+    /// @param startTime The unix timestamp at which bidding can start.
+    /// @param bidPeriod The duration of the bidding period, in seconds.
+    /// @param revealPeriod The duration of the commitment reveal period, 
+    ///        in seconds.
+    /// @param reservePrice The minimum price that the asset will be sold for.
+    function createAuction(
+        uint32 startTime, 
+        uint32 bidPeriod,
+        uint32 revealPeriod,
+        uint88 reservePrice
+    ) 
+        external 
+        onlyOwner
+        nonReentrant
+    {
+        AuctionInfo memory theAuction = auction;
 
-    function approve(address spender, uint256 id) public virtual {
-        address owner = _ownerOf[id];
+        if(theAuction.status != Status.Uninitialized && theAuction.status != Status.Initialized)
+            revert AlreadyStartedError();
 
-        require(msg.sender == owner || isApprovedForAll[owner][msg.sender], "NOT_AUTHORIZED");
+        if (startTime == 0) {
+            startTime = uint32(block.timestamp);
+        } else if (startTime < block.timestamp) {
+            revert InvalidStartTimeError(startTime);
+        }
+        if (bidPeriod < 8 hours) {
+            revert BidPeriodTooShortError(bidPeriod);
+        }
+        if (revealPeriod < 8 hours) {
+            revert RevealPeriodTooShortError(revealPeriod);
+        }
+        // if the auction has been initialized but it's not in the bidding period we can move it further into the future
 
-        getApproved[id] = spender;
+        if (theAuction.startTime > 0)
+        {
+            if (block.timestamp > theAuction.startTime || theAuction.startTime > startTime)
+                revert InvalidStartTimeError(startTime);
+        }
+        theAuction.startTime = startTime;
+        theAuction.endOfBiddingPeriod = startTime + bidPeriod;
+        theAuction.endOfRevealPeriod = startTime + bidPeriod + revealPeriod;
+        theAuction.reservePrice = reservePrice;
+        theAuction.status = Status.Initialized;
 
-        emit Approval(owner, spender, id);
-    }
-
-    function setApprovalForAll(address operator, bool approved) public virtual {
-        isApprovedForAll[msg.sender][operator] = approved;
-
-        emit ApprovalForAll(msg.sender, operator, approved);
-    }
-
-    function transferFrom(
-        address from,
-        address to,
-        uint256 id
-    ) public virtual {
-        require(from == _ownerOf[id], "WRONG_FROM");
-
-        require(to != address(0), "INVALID_RECIPIENT");
-
-        require(
-            msg.sender == from || isApprovedForAll[from][msg.sender] || msg.sender == getApproved[id],
-            "NOT_AUTHORIZED"
+        auction = theAuction;
+        
+        emit AuctionCreated(
+            startTime,
+            bidPeriod,
+            revealPeriod,
+            reservePrice,
+            items
         );
-
-        // Underflow of the sender's balance is impossible because we check for
-        // ownership above and the recipient's balance can't realistically overflow.
-        unchecked {
-            _balanceOf[from]--;
-
-            _balanceOf[to]++;
-        }
-
-        _ownerOf[id] = to;
-
-        delete getApproved[id];
-
-        emit Transfer(from, to, id);
-    }
-
-    function safeTransferFrom(
-        address from,
-        address to,
-        uint256 id
-    ) public virtual {
-        transferFrom(from, to, id);
-
-        if (to.code.length != 0)
-            require(
-                ERC721TokenReceiver(to).onERC721Received(msg.sender, from, id, "") ==
-                    ERC721TokenReceiver.onERC721Received.selector,
-                "UNSAFE_RECIPIENT"
-            );
-    }
-
-    function safeTransferFrom(
-        address from,
-        address to,
-        uint256 id,
-        bytes calldata data
-    ) public virtual {
-        transferFrom(from, to, id);
-
-        if (to.code.length != 0)
-            require(
-                ERC721TokenReceiver(to).onERC721Received(msg.sender, from, id, data) ==
-                    ERC721TokenReceiver.onERC721Received.selector,
-                "UNSAFE_RECIPIENT"
-            );
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                              ERC165 LOGIC
-    //////////////////////////////////////////////////////////////*/
-
-    function supportsInterface(bytes4 interfaceId) public view virtual returns (bool) {
-        return
-            interfaceId == 0x01ffc9a7 || // ERC165 Interface ID for ERC165
-            interfaceId == 0x80ac58cd || // ERC165 Interface ID for ERC721
-            interfaceId == 0x5b5e139f; // ERC165 Interface ID for ERC721Metadata
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                        INTERNAL MINT/BURN LOGIC
-    //////////////////////////////////////////////////////////////*/
-
-    function _mint(address to, uint256 id) internal virtual {
-        require(to != address(0), "INVALID_RECIPIENT");
-
-        require(_ownerOf[id] == address(0), "ALREADY_MINTED");
-
-        // Counter overflow is incredibly unrealistic.
-        unchecked {
-            _balanceOf[to]++;
-        }
-
-        _ownerOf[id] = to;
-
-        emit Transfer(address(0), to, id);
-    }
-
-    function _burn(uint256 id) internal virtual {
-        address owner = _ownerOf[id];
-
-        require(owner != address(0), "NOT_MINTED");
-
-        // Ownership check above ensures no underflow.
-        unchecked {
-            _balanceOf[owner]--;
-        }
-
-        delete _ownerOf[id];
-
-        delete getApproved[id];
-
-        emit Transfer(owner, address(0), id);
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                        INTERNAL SAFE MINT LOGIC
-    //////////////////////////////////////////////////////////////*/
-
-    function _safeMint(address to, uint256 id) internal virtual {
-        _mint(to, id);
-
-        if (to.code.length != 0)
-            require(
-                ERC721TokenReceiver(to).onERC721Received(msg.sender, address(0), id, "") ==
-                    ERC721TokenReceiver.onERC721Received.selector,
-                "UNSAFE_RECIPIENT"
-            );
-    }
-
-    function _safeMint(
-        address to,
-        uint256 id,
-        bytes memory data
-    ) internal virtual {
-        _mint(to, id);
-
-        if (to.code.length != 0)
-            require(
-                ERC721TokenReceiver(to).onERC721Received(msg.sender, address(0), id, data) ==
-                    ERC721TokenReceiver.onERC721Received.selector,
-                "UNSAFE_RECIPIENT"
-            );
-    }
-}
-
-/// @notice A generic interface for a contract which properly accepts ERC721 tokens.
-/// @author Solmate (https://github.com/Rari-Capital/solmate/blob/main/src/tokens/ERC721.sol)
-abstract contract ERC721TokenReceiver {
-    function onERC721Received(
-        address,
-        address,
-        uint256,
-        bytes calldata
-    ) external virtual returns (bytes4) {
-        return ERC721TokenReceiver.onERC721Received.selector;
     }
 }
