@@ -3,6 +3,7 @@ pragma solidity >=0.8.0;
 
 import {Owned} from "@solbase/auth/Owned.sol";
 import {ReentrancyGuard} from "@solbase/utils/ReentrancyGuard.sol";
+import "@solbase/utils/SafeTransferLib.sol";
 import {ERC721} from "./ERC721.sol";
 
 
@@ -25,11 +26,14 @@ import {ERC721} from "./ERC721.sol";
 
 
 contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
+    using SafeTransferLib for address;
+
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
 
     event AuctionCreated(uint32 startTime, uint32 bidPeriod, uint32 revealPeriod, uint88 reservePrice);
+    event BidRevealed(address indexed sender, uint88 bidValue, uint8 bidAmount);
 
     /*//////////////////////////////////////////////////////////////
                          METADATA STORAGE/LOGIC
@@ -138,5 +142,88 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
             revealPeriod,
             reservePrice
         );
+    }
+
+    /// @notice Commits to a bid. If a bid was
+    ///         previously committed to, overwrites the previous commitment.
+    ///         Value attached to this call is added as collateral for the bid.
+    /// @param commitment The commitment to the bid, computed as
+    ///        `bytes21(keccak256(abi.encode(nonce, bidValue, bidAmount, address(this))))`.
+    function commitBid(bytes21 commitment
+    )
+        external
+        payable
+        nonReentrant
+    {
+        if (commitment == bytes21(0)) {
+            revert ZeroCommitmentError();
+        }
+
+        AuctionInfo memory theAuction = auction;
+
+        if (
+            block.timestamp < theAuction.startTime || 
+            block.timestamp > theAuction.endOfBiddingPeriod
+        ) {
+            revert NotInBidPeriodError();
+        }
+
+        SealedBid storage bid = sealedBids[msg.sender];
+        bid.commitment = commitment;
+        if (msg.value != 0) {
+            bid.collateral += uint88(msg.value);
+        }
+    }
+
+    /// @notice Reveals the value and amount of a bid that was previously committed to. 
+    /// @param bidAmount The amount of the bid.
+    /// @param bidValue The value of the bid.
+    /// @param nonce The random input used to obfuscate the commitment.
+    function revealBid(
+        uint8 bidAmount,
+        uint88 bidValue,
+        bytes32 nonce
+    )
+        external
+        nonReentrant
+    {
+        AuctionInfo memory theAuction = auction;
+
+        if (
+            block.timestamp <= theAuction.endOfBiddingPeriod ||
+            block.timestamp > theAuction.endOfRevealPeriod
+        ) {
+            revert NotInRevealPeriodError();
+        }
+
+        SealedBid storage bid = sealedBids[msg.sender];
+
+        // Check that the opening is valid
+        bytes21 bidHash = bytes21(keccak256(abi.encode(
+            nonce,
+            bidValue,
+            bidAmount,
+            address(this))));
+        if (bidHash != bid.commitment) {
+            revert InvalidOpeningError(bidHash, bid.commitment);
+        } else {
+            // Mark commitment as open
+            bid.commitment = bytes21(0);
+        }
+
+        uint88 collateral = bid.collateral;
+        if (collateral < bidValue || bidValue < auction.reservePrice || bidAmount > collectionSize) {
+            // Return collateral
+            bid.collateral = 0;
+            msg.sender.safeTransferETH(collateral);
+        } else { 
+            revealedBids.push(RevealedBid({bidder: msg.sender, amount: bidAmount, value: bidValue}));
+
+            emit BidRevealed(
+                msg.sender,
+                bidValue, 
+                bidAmount
+            );
+        }
     }
 }
