@@ -3,9 +3,10 @@ pragma solidity >=0.8.0;
 
 import {Owned} from "@solbase/auth/Owned.sol";
 import {ReentrancyGuard} from "@solbase/utils/ReentrancyGuard.sol";
+import {ERC721} from "./ERC721.sol";
 
 
-interface BotThisErrors {
+//library BotThisErrors {
     error AlreadyStartedError();
     error RevealPeriodOngoingError();
     error BidPeriodOngoingError();
@@ -20,7 +21,7 @@ interface BotThisErrors {
     error ZeroCommitmentError();
     error InvalidStartTimeError(uint32 startTime);
     error InvalidOpeningError(bytes21 bidHash, bytes21 commitment);
-}
+//}
 
 
 contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
@@ -28,10 +29,13 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
 
+    event AuctionCreated(uint32 startTime, uint32 bidPeriod, uint32 revealPeriod, uint88 reservePrice);
 
     /*//////////////////////////////////////////////////////////////
                          METADATA STORAGE/LOGIC
     //////////////////////////////////////////////////////////////*/
+
+    uint8 immutable public collectionSize;
 
     enum Status {
         Uninitialized,
@@ -45,9 +49,8 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
         uint32 endOfBiddingPeriod;
         uint32 endOfRevealPeriod;
         uint88 reservePrice;
-        uint8  collectionSize;
         Status status; 
-        // still 56 bits available in this slot
+        // still 64 bits available in this slot
     }
 
     /// @dev Representation of a sealed bid in storage. Occupies one slot.
@@ -77,9 +80,10 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
                                CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
 
-    constructor(string memory _name, string memory _symbol) {
+    constructor(string memory _name, string memory _symbol, uint8 _size) {
         name = _name;
         symbol = _symbol;
+        collectionSize = _size;
     }
 
     /// @notice Creates an auction for the given ERC721 asset with the given
@@ -109,14 +113,12 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
         } else if (startTime < block.timestamp) {
             revert InvalidStartTimeError(startTime);
         }
-        if (bidPeriod < 8 hours) {
+        if (bidPeriod < 1 hours) {
             revert BidPeriodTooShortError(bidPeriod);
         }
-        if (revealPeriod < 8 hours) {
+        if (revealPeriod < 1 hours) {
             revert RevealPeriodTooShortError(revealPeriod);
         }
-        // if the auction has been initialized but it's not in the bidding period we can move it further into the future
-
         if (theAuction.startTime > 0)
         {
             if (block.timestamp > theAuction.startTime || theAuction.startTime > startTime)
@@ -134,8 +136,7 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
             startTime,
             bidPeriod,
             revealPeriod,
-            reservePrice,
-            items
+            reservePrice
         );
     }
 }
