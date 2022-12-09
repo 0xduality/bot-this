@@ -75,9 +75,17 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
         uint88  value;
     }
 
+    /// @dev Representation of an auction outcome. Occupies one slot.
+    /// @param price Price to be paid.
+    /// @param amount Amount of items awarded.
+    struct Outcome {
+        uint88  price;
+        uint8   amount;
+    }
+
     AuctionInfo public auction;
     mapping(address => SealedBid) public sealedBids;
-    mapping(address => uint256) public payments;
+    mapping(address => Outcome) public outcomes;
     RevealedBid[] public revealedBids;
 
     /*//////////////////////////////////////////////////////////////
@@ -250,14 +258,14 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
         }
         if (theAuction.status == Status.Ongoing)
             revert AuctionNotFinalizedError();
-        uint88 payment = uint88(payments[msg.sender]);
+        Outcome memory outcome = outcomes[msg.sender];
         // Return remainder
-        uint88 remainder = bid.collateral - payment;
+        uint88 remainder = bid.collateral - outcome.price;
         bid.collateral = 0;
         msg.sender.safeTransferETH(remainder);
     }
 
-    function cancelAuction(address tokenContract)
+    function cancelAuction()
         external
         nonReentrant
     {
@@ -367,7 +375,8 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
         uint256 optval = forward[currentRowOffset+remainingAmount];
         if (forward[currentRowOffset+remainingAmount] != forward[previousRowOffset+remainingAmount])
         {
-            payments[bidders[len-1]] = forward[currentRowOffset-1] - (optval - values[len-1]);
+            uint88 price = uint88(forward[currentRowOffset-1] - (optval - values[len-1]));
+            outcomes[bidders[len-1]] = Outcome({price: price, amount: amounts[len-1]});
             remainingAmount -= amounts[len-1];
         }
         for(uint256 i=len-2; i>0; --i)
@@ -377,21 +386,23 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
             if (forward[currentRowOffset+remainingAmount] != forward[previousRowOffset+remainingAmount])
             {
                 uint256 nextRowOffset = currentRowOffset + stride;
-                remainingAmount -= amounts[i];
+                uint256 previousRowLast = currentRowOffset - 1;
                 uint256 M = 0;
                 for(uint256 j; j<stride; ++j)
                 {
-                    uint256 m = forward[currentRowOffset-j-1]+backward[nextRowOffset+j];
-                    if (m > M)
-                        M = m;
+                    uint256 m = forward[previousRowLast-j] + backward[nextRowOffset+j];
+                    M = m > M ? m : M;
                 }
-                payments[bidders[i]] = M - (optval - values[i]);
+                uint88 price = uint88(M - (optval - values[i]));
+                outcomes[bidders[i]] = Outcome({price: price, amount: amounts[i]});
+                remainingAmount -= amounts[i];
             }
         }
         if (forward[remainingAmount] > 0)
         {
+            uint88 price = uint88(backward[2 * stride - 1] - (optval - values[0]));
+            outcomes[bidders[0]] = Outcome({price: price, amount: amounts[0]});
             remainingAmount -= amounts[0];
-            payments[bidders[0]] = backward[2*stride-1] - (optval - values[0]);
         }
 //        for(uint256 i; i< len; ++i)
 //        {
