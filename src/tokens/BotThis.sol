@@ -225,7 +225,7 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
     /// @notice Allows a user with a sealed bid to open it after the auction was finalized. 
     ///         Useful if a user could not open their bid during reveal time (lost the nonce, fell asleep, etc.)
     function emergencyReveal() external {
-        Auction memory theAuction = auction;
+        AuctionInfo memory theAuction = auction;
         if (theAuction.status == Status.Ongoing)
             revert AuctionNotFinalizedError();
 
@@ -243,7 +243,7 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
         external
         nonReentrant        
     {
-        Auction memory theAuction = auction;
+        AuctionInfo memory theAuction = auction;
         SealedBid storage bid = sealedBids[msg.sender];
         if (bid.commitment != bytes21(0)) {
             revert UnrevealedBidError();
@@ -277,7 +277,7 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
         external
         nonReentrant
     {
-        Auction memory theAuction = auction;
+        AuctionInfo memory theAuction = auction;
 
         if (block.timestamp <= auction.endOfBiddingPeriod) {
             revert BidPeriodOngoingError();
@@ -367,7 +367,7 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
         uint256 optval = forward[currentRowOffset+remainingAmount];
         if (forward[currentRowOffset+remainingAmount] != forward[previousRowOffset+remainingAmount])
         {
-            payment[bidders[len-1]] = forward[currentRowOffset-1] - (optval - values[len-1]);
+            payments[bidders[len-1]] = forward[currentRowOffset-1] - (optval - values[len-1]);
             remainingAmount -= amounts[len-1];
         }
         for(uint256 i=len-2; i>0; --i)
@@ -385,17 +385,17 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
                     if (m > M)
                         M = m;
                 }
-                payment[bidders[i]] = M - (optval - values[i]);
+                payments[bidders[i]] = M - (optval - values[i]);
             }
         }
         if (forward[remainingAmount] > 0)
         {
             remainingAmount -= amounts[0];
-            payment[bidders[0]] = backward[2*stride-1] - (optval - values[0]);
+            payments[bidders[0]] = backward[2*stride-1] - (optval - values[0]);
         }
-        for(uint256 i; i< len; ++i)
-        {
-            console.log(i, payment[bidders[i]]);
-        }
+//        for(uint256 i; i< len; ++i)
+//        {
+//            console.log(i, payments[bidders[i]]);
+//        }
     }
 }

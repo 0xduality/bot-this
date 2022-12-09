@@ -9,6 +9,7 @@ auto_detect_solc = false
 optimizer = true
 optimizer_runs = 1_000
 fuzz_runs = 1_000
+viaIR = true
 remappings = [
   "@forge-std=lib/forge-std/src/",
   "@solbase=lib/solbase/src/",
