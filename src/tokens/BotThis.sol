@@ -9,6 +9,7 @@ import {ERC721} from "./ERC721.sol";
 
 //library BotThisErrors {
     error AlreadyStartedError();
+    error AuctionNotFinalizedError();
     error RevealPeriodOngoingError();
     error BidPeriodOngoingError();
     error InvalidSeller(address sender, address seller);
@@ -42,8 +43,7 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
     uint8 immutable public collectionSize;
 
     enum Status {
-        Uninitialized,
-        Initialized,
+        Ongoing,
         Finalized,
         Canceled
     }
@@ -109,7 +109,7 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
     {
         AuctionInfo memory theAuction = auction;
 
-        if(theAuction.status != Status.Uninitialized && theAuction.status != Status.Initialized)
+        if(theAuction.status != Status.Ongoing)
             revert AlreadyStartedError();
 
         if (startTime == 0) {
@@ -132,7 +132,6 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
         theAuction.endOfBiddingPeriod = startTime + bidPeriod;
         theAuction.endOfRevealPeriod = startTime + bidPeriod + revealPeriod;
         theAuction.reservePrice = reservePrice;
-        theAuction.status = Status.Initialized;
 
         auction = theAuction;
         
@@ -212,18 +211,191 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
         }
 
         uint88 collateral = bid.collateral;
-        if (collateral < bidValue || bidValue < auction.reservePrice || bidAmount > collectionSize) {
+        if (collateral < bidValue || bidValue < theAuction.reservePrice || bidAmount > collectionSize) {
             // Return collateral
             bid.collateral = 0;
             msg.sender.safeTransferETH(collateral);
         } else { 
             revealedBids.push(RevealedBid({bidder: msg.sender, amount: bidAmount, value: bidValue}));
 
-            emit BidRevealed(
-                msg.sender,
-                bidValue, 
-                bidAmount
-            );
+            emit BidRevealed(msg.sender, bidValue, bidAmount);
+        }
+    }
+
+    /// @notice Allows a user with a sealed bid to open it after the auction was finalized. 
+    ///         Useful if a user could not open their bid during reveal time (lost the nonce, fell asleep, etc.)
+    function emergencyReveal() external {
+        Auction memory theAuction = auction;
+        if (theAuction.status == Status.Ongoing)
+            revert AuctionNotFinalizedError();
+
+        SealedBid storage bid = sealedBids[msg.sender];
+        
+        if (bid.commitment != bytes21(0))
+        {
+            // Mark as open
+            bid.commitment = bytes21(0);
+        }
+    }
+
+    /// @notice Withdraws collateral.
+    function withdrawCollateral()
+        external
+        nonReentrant        
+    {
+        Auction memory theAuction = auction;
+        SealedBid storage bid = sealedBids[msg.sender];
+        if (bid.commitment != bytes21(0)) {
+            revert UnrevealedBidError();
+        }
+        if (theAuction.status == Status.Ongoing)
+            revert AuctionNotFinalizedError();
+        uint88 payment = uint88(payments[msg.sender]);
+        // Return remainder
+        uint88 remainder = bid.collateral - payment;
+        bid.collateral = 0;
+        msg.sender.safeTransferETH(remainder);
+    }
+
+    function cancelAuction(address tokenContract)
+        external
+        nonReentrant
+    {
+        AuctionInfo memory theAuction = auction;
+
+        if (block.timestamp <= theAuction.endOfBiddingPeriod) {
+            revert BidPeriodOngoingError();
+        } else if (block.timestamp <= theAuction.endOfRevealPeriod) {
+            revert RevealPeriodOngoingError();
+        }
+        auction.status = Status.Canceled;
+    }
+
+    /// @notice Finalizes the auction. Can only do so if the bid reveal
+    ///         phase is over.
+    function finalizeAuction()
+        external
+        nonReentrant
+    {
+        Auction memory theAuction = auction;
+
+        if (block.timestamp <= auction.endOfBiddingPeriod) {
+            revert BidPeriodOngoingError();
+        } else if (block.timestamp <= auction.endOfRevealPeriod) {
+            revert RevealPeriodOngoingError();
+        }
+
+        // add dummy buyers at the reserve price
+        for (uint8 i=128; i > 0; i >>= 1)
+        {
+            revealedBids.push(RevealedBid({bidder: address(uint160(i)), amount: i, value: theAuction.reservePrice}));
+        }
+
+        auction.status = Status.Finalized;
+
+        vcg();
+    }
+
+    /// @notice vcg
+    function vcg() internal
+    {
+        uint256 len = revealedBids.length;
+        uint256[] memory values = new uint256[](len);
+        uint8[] memory amounts = new uint8[](len);
+        address[] memory bidders = new address[](len);
+        uint8 stride = collectionSize + 1;
+        for (uint256 i; i < len; ++i){
+            RevealedBid memory r = revealedBids[i];
+            bidders[i] = r.bidder;
+            values[i] = r.value;
+            amounts[i] = r.amount;
+        }
+        uint256[] memory forward = new uint256[](len*stride);
+        uint8 wi = amounts[0];
+        uint256 vi = values[0];
+        for(uint256 j = wi; j < stride; ++j){
+            forward[j] = vi;
+        }
+        uint256 previousRowOffset = 0;
+        uint256 currentRowOffset = stride;
+        for(uint256 i=1; i < len; ++i){
+            wi = amounts[i];
+            vi = values[i];
+             
+            for(uint256 j; j<wi; ++j){
+                forward[currentRowOffset+j] = forward[previousRowOffset+j];                 
+            }
+            for(uint256 j=wi; j<stride; ++j){
+                uint256 valueWithout = forward[previousRowOffset+j];
+                uint256 valueWith = forward[previousRowOffset+j-wi] + vi;
+                forward[currentRowOffset+j] = valueWith > valueWithout ? valueWith : valueWithout;                 
+            }
+            previousRowOffset += stride;
+            currentRowOffset += stride;
+        }
+        // offset used to be the current row so it is pointing to len-1 row
+        // currentRowOffSet is pointing to len (outside memory)
+
+        uint256[] memory backward = new uint256[](len*stride);
+        wi = amounts[len-1];
+        vi = values[len-1];
+        for(uint256 j=wi; j<stride; ++j){
+            backward[previousRowOffset+j] = vi;
+        }
+        currentRowOffset -= (stride<<1);
+
+        for(uint256 i=len-2; ; --i){
+            wi = amounts[i];
+            vi = values[i];
+             
+            for(uint256 j; j<wi; ++j){
+                backward[currentRowOffset+j] = backward[previousRowOffset+j];                 
+            }
+            for(uint256 j=wi; j<stride; ++j){
+                uint256 valueWithout = backward[previousRowOffset+j];
+                uint256 valueWith = backward[previousRowOffset+j-wi] + vi;
+                backward[currentRowOffset+j] = valueWith > valueWithout ? valueWith : valueWithout;                 
+            }
+            if (i==0)
+                break;
+            previousRowOffset -= stride;
+            currentRowOffset -= stride;
+        }
+        currentRowOffset = (len-1)*stride;
+        previousRowOffset = currentRowOffset - stride;
+        uint256 remainingAmount = stride - 1;
+        uint256 optval = forward[currentRowOffset+remainingAmount];
+        if (forward[currentRowOffset+remainingAmount] != forward[previousRowOffset+remainingAmount])
+        {
+            payment[bidders[len-1]] = forward[currentRowOffset-1] - (optval - values[len-1]);
+            remainingAmount -= amounts[len-1];
+        }
+        for(uint256 i=len-2; i>0; --i)
+        {
+            currentRowOffset -= stride;
+            previousRowOffset -= stride;
+            if (forward[currentRowOffset+remainingAmount] != forward[previousRowOffset+remainingAmount])
+            {
+                uint256 nextRowOffset = currentRowOffset + stride;
+                remainingAmount -= amounts[i];
+                uint256 M = 0;
+                for(uint256 j; j<stride; ++j)
+                {
+                    uint256 m = forward[currentRowOffset-j-1]+backward[nextRowOffset+j];
+                    if (m > M)
+                        M = m;
+                }
+                payment[bidders[i]] = M - (optval - values[i]);
+            }
+        }
+        if (forward[remainingAmount] > 0)
+        {
+            remainingAmount -= amounts[0];
+            payment[bidders[0]] = backward[2*stride-1] - (optval - values[0]);
+        }
+        for(uint256 i; i< len; ++i)
+        {
+            console.log(i, payment[bidders[i]]);
         }
     }
 }
