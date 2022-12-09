@@ -12,15 +12,14 @@ import {ERC721} from "./ERC721.sol";
     error AuctionNotFinalizedError();
     error RevealPeriodOngoingError();
     error BidPeriodOngoingError();
-    error InvalidSeller(address sender, address seller);
-    error InvalidAuctionIndexError(uint64 index);
     error BidPeriodTooShortError(uint32 bidPeriod);
     error RevealPeriodTooShortError(uint32 revealPeriod);
     error NotInRevealPeriodError();
     error NotInBidPeriodError();
     error UnrevealedBidError();
-    error CannotWithdrawError();
+    //error CannotWithdrawError();
     error ZeroCommitmentError();
+    error TotalSupplyExceeded();
     error InvalidStartTimeError(uint32 startTime);
     error InvalidOpeningError(bytes21 bidHash, bytes21 commitment);
 //}
@@ -84,6 +83,7 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
     }
 
     AuctionInfo public auction;
+    uint8 public currentTokenId;
     mapping(address => SealedBid) public sealedBids;
     mapping(address => Outcome) public outcomes;
     RevealedBid[] public revealedBids;
@@ -305,6 +305,7 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
     }
 
     /// @notice vcg
+    /// TODO: need to keep track of all the payments so owner can withdraw the correct amount
     function vcg() internal
     {
         uint256 len = revealedBids.length;
@@ -409,4 +410,41 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
 //            console.log(i, payments[bidders[i]]);
 //        }
     }
+
+    function mint() external nonReentrant {
+        if (auction.status != Status.Finalized)
+            revert AuctionNotFinalizedError();
+        
+        Outcome memory outcome = outcomes[msg.sender];
+        uint8 amount = outcome.amount;
+        for (uint8 i=0; i<amount; ++i)
+        {
+            uint8 newTokenId = currentTokenId++;
+            if (newTokenId > collectionSize)
+                revert TotalSupplyExceeded(); // could only happen if there's a bug in vcg
+            _safeMint(msg.sender, newTokenId);
+        }
+    }
+
+    /*
+    using Strings for uint256;
+    string public baseURI;
+    function tokenURI(uint256 tokenId)
+        public
+        view
+        virtual
+        override
+        returns (string memory)
+    {
+        require(
+            ownerOf[tokenId] != address(0),
+            "ERC721Metadata: URI query for nonexistent token"
+        );
+        return
+            bytes(baseURI).length > 0
+                ? string(abi.encodePacked(baseURI, tokenId.toString()))
+                : "";
+    }
+    */
+
 }
