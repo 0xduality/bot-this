@@ -6,14 +6,7 @@ import "forge-std/Test.sol";
 contract BotThisTest is Test {
     using stdStorage for StdStorage;
 
-    function setUp() public
-    {
+    function setUp() public {}
 
-    }
-
-    function testSomething() public
-    {
-        
-    }
-
+    function testSomething() public {}
 }
