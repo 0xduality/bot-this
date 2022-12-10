@@ -4,11 +4,13 @@ pragma solidity >=0.8.0;
 import {Owned} from "@solbase/auth/Owned.sol";
 import {ReentrancyGuard} from "@solbase/utils/ReentrancyGuard.sol";
 import "@solbase/utils/SafeTransferLib.sol";
+import "@solbase/utils/LibString.sol";
 import {ERC721} from "./ERC721.sol";
 
 
 //library BotThisErrors {
     error AlreadyStartedError();
+    error TopBiddersOddError();
     error AuctionNotFinalizedError();
     error RevealPeriodOngoingError();
     error BidPeriodOngoingError();
@@ -27,6 +29,7 @@ import {ERC721} from "./ERC721.sol";
 
 contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
     using SafeTransferLib for address;
+    using LibString for uint256;
 
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
@@ -40,6 +43,7 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
     //////////////////////////////////////////////////////////////*/
 
     uint8 immutable public collectionSize;
+    uint16 immutable public topBidders;
 
     enum Status {
         Ongoing,
@@ -84,6 +88,8 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
 
     AuctionInfo public auction;
     uint8 public currentTokenId;
+    uint256 public withdrawableBalance;
+    string public baseURI;
     mapping(address => SealedBid) public sealedBids;
     mapping(address => Outcome) public outcomes;
     RevealedBid[] public revealedBids;
@@ -92,10 +98,14 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
                                CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
 
-    constructor(string memory _name, string memory _symbol, uint8 _size) {
+    constructor(string memory _name, string memory _symbol, uint8 _size, uint16 _topBidders, string memory _baseURI) {
+        if ((_topBidders & 1) == 1)
+            revert TopBiddersOddError();
         name = _name;
         symbol = _symbol;
         collectionSize = _size;
+        topBidders = _topBidders;
+        baseURI = _baseURI;
     }
 
     /// @notice Creates an auction for the given ERC721 asset with the given
@@ -224,9 +234,35 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
             bid.collateral = 0;
             msg.sender.safeTransferETH(collateral);
         } else { 
-            revealedBids.push(RevealedBid({bidder: msg.sender, amount: bidAmount, value: bidValue}));
-
+            addRevealedBid(msg.sender, bidAmount, bidValue);
             emit BidRevealed(msg.sender, bidValue, bidAmount);
+        }
+    }
+
+    function addRevealedBid(address account, uint8 bidAmount, uint88 bidValue) internal
+    {
+        RevealedBid memory newBid = RevealedBid({bidder: account, amount: bidAmount, value: bidValue});
+        if (revealedBids.length < topBidders)
+        {
+            revealedBids.push(newBid);
+            siftDown(revealedBids.length-1);
+        }
+        else
+        {
+            // we have reached capacity
+            // check whether the bid is has a higher price than the smallest price in topBidders
+            // if so move it in the heap of topBidders otherwise just append it
+            RevealedBid memory popCandidate = revealedBids[0];
+            if (bidValue * popCandidate.amount  > popCandidate.value * bidAmount)
+            {
+                revealedBids.push(popCandidate);
+                revealedBids[0] = newBid;
+                siftUp();
+            }
+            else
+            {
+                revealedBids.push(newBid);
+            }
         }
     }
 
@@ -296,7 +332,7 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
         // add dummy buyers at the reserve price
         for (uint8 i=128; i > 0; i >>= 1)
         {
-            revealedBids.push(RevealedBid({bidder: address(uint160(i)), amount: i, value: theAuction.reservePrice}));
+            addRevealedBid(address(uint160(i)), i, i*theAuction.reservePrice);
         }
 
         auction.status = Status.Finalized;
@@ -308,7 +344,7 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
     /// TODO: need to keep track of all the payments so owner can withdraw the correct amount
     function vcg() internal
     {
-        uint256 len = revealedBids.length;
+        uint256 len = revealedBids.length < topBidders ? revealedBids.length : topBidders;
         uint256[] memory values = new uint256[](len);
         uint8[] memory amounts = new uint8[](len);
         address[] memory bidders = new address[](len);
@@ -377,7 +413,10 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
         if (forward[currentRowOffset+remainingAmount] != forward[previousRowOffset+remainingAmount])
         {
             uint88 price = uint88(forward[currentRowOffset-1] - (optval - values[len-1]));
-            outcomes[bidders[len-1]] = Outcome({price: price, amount: amounts[len-1]});
+            address bidder = bidders[len - 1];
+            if (uint160(bidder) > type(uint8).max)
+                withdrawableBalance += price;
+            outcomes[bidder] = Outcome({price: price, amount: amounts[len-1]});
             remainingAmount -= amounts[len-1];
         }
         for(uint256 i=len-2; i>0; --i)
@@ -395,14 +434,20 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
                     M = m > M ? m : M;
                 }
                 uint88 price = uint88(M - (optval - values[i]));
-                outcomes[bidders[i]] = Outcome({price: price, amount: amounts[i]});
+                address bidder = bidders[i];
+                if (uint160(bidder) > type(uint8).max)
+                    withdrawableBalance += price;
+                outcomes[bidder] = Outcome({price: price, amount: amounts[i]});
                 remainingAmount -= amounts[i];
             }
         }
         if (forward[remainingAmount] > 0)
         {
             uint88 price = uint88(backward[2 * stride - 1] - (optval - values[0]));
-            outcomes[bidders[0]] = Outcome({price: price, amount: amounts[0]});
+            address bidder = bidders[0];
+            if (uint160(bidder) > type(uint8).max)
+                withdrawableBalance += price;
+            outcomes[bidder] = Outcome({price: price, amount: amounts[0]});
             remainingAmount -= amounts[0];
         }
 //        for(uint256 i; i< len; ++i)
@@ -426,9 +471,13 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
         }
     }
 
-    /*
-    using Strings for uint256;
-    string public baseURI;
+    function withdrawBalance() external onlyOwner {
+        uint256 amount = withdrawableBalance;
+        withdrawableBalance = 0;
+        msg.sender.safeTransferETH(amount);
+    }
+
+
     function tokenURI(uint256 tokenId)
         public
         view
@@ -437,7 +486,7 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
         returns (string memory)
     {
         require(
-            ownerOf[tokenId] != address(0),
+            ownerOf(tokenId) != address(0),
             "ERC721Metadata: URI query for nonexistent token"
         );
         return
@@ -445,6 +494,58 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721  {
                 ? string(abi.encodePacked(baseURI, tokenId.toString()))
                 : "";
     }
-    */
 
+    /*
+    # Restore the heap invariant assuming 'revealedBids' is a heap except possibly for pos.
+    */
+    function siftDown(uint256 pos) internal
+    {
+        RevealedBid memory newItem = revealedBids[pos];
+        /*     
+        # Follow the path to the root, moving parents down until finding a place newItem fits.
+        */
+        while(pos > 0)
+        {
+            uint256 parentpos = (pos - 1) >> 1;
+            RevealedBid memory parent = revealedBids[parentpos];
+            if (newItem.value * parent.amount < parent.value * newItem.amount)
+            {
+                revealedBids[pos] = parent;
+                pos = parentpos;
+                continue;
+            }
+            break;
+        }
+        revealedBids[pos] = newItem;
+    }
+
+    function siftUp() internal
+    {
+        uint256 endpos = topBidders;
+        uint256 pos = 0;
+        RevealedBid memory newItem = revealedBids[pos];
+        uint256 leftpos = (pos << 1) + 1;
+        while (leftpos < endpos)
+        {
+            uint256 rightpos = leftpos + 1;
+            RevealedBid memory left = revealedBids[leftpos];
+            RevealedBid memory right = revealedBids[rightpos];
+            if (left.value * right.amount < right.value * left.amount) 
+            {
+                revealedBids[pos] = left;
+                pos = leftpos;
+             }
+             else{
+                 revealedBids[pos] = right;
+                 pos = rightpos;
+             }
+            leftpos = (pos << 1) + 1;           
+        }      
+        /*     
+        # The leaf at pos is empty now.  Put newItem there, and bubble it up 
+        # to its final resting place (by sifting its parents down).
+        */
+        revealedBids[pos] = newItem;
+        siftDown(pos); 
+    }
 }
