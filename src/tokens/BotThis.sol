@@ -6,24 +6,10 @@ import {ReentrancyGuard} from "@solbase/utils/ReentrancyGuard.sol";
 import "@solbase/utils/SafeTransferLib.sol";
 import "@solbase/utils/LibString.sol";
 import {ERC721} from "./ERC721.sol";
+import {IBotThisErrors} from "./IBotThisErrors.sol";
 
-// errors
-error AlreadyStartedError();
-error TopBiddersOddError();
-error AuctionNotFinalizedError();
-error RevealPeriodOngoingError();
-error BidPeriodOngoingError();
-error BidPeriodTooShortError(uint32 bidPeriod);
-error RevealPeriodTooShortError(uint32 revealPeriod);
-error NotInRevealPeriodError();
-error NotInBidPeriodError();
-error UnrevealedBidError();
-error ZeroCommitmentError();
-error TotalSupplyExceeded();
-error InvalidStartTimeError(uint32 startTime);
-error InvalidOpeningError(bytes21 bidHash, bytes21 commitment);
 
-contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721 {
+contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
     using SafeTransferLib for address;
     using LibString for uint256;
 
