@@ -75,16 +75,18 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721 {
     }
 
     /// @dev Representation of an auction outcome. Occupies one slot.
-    /// @param price Price to be paid.
+    /// @param payment payment to be paid.
     /// @param amount Amount of items awarded.
     struct Outcome {
-        uint88 price;
+        uint88 payment;
         uint8 amount;
     }
 
     AuctionInfo public auction;
+    // ====
+    uint248 public withdrawableBalance;
     uint8 public currentTokenId;
-    uint256 public withdrawableBalance;
+    // ====
     string public baseURI;
     mapping(address => SealedBid) public sealedBids;
     mapping(address => Outcome) public outcomes;
@@ -253,7 +255,7 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721 {
         }
         Outcome memory outcome = outcomes[msg.sender];
         // Return remainder
-        uint88 remainder = bid.collateral - outcome.price;
+        uint88 remainder = bid.collateral - outcome.payment;
         bid.collateral = 0;
         msg.sender.safeTransferETH(remainder);
     }
@@ -361,12 +363,12 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721 {
         uint256 remainingAmount = stride - 1;
         uint256 optval = forward[currentRowOffset + remainingAmount];
         if (forward[currentRowOffset + remainingAmount] != forward[previousRowOffset + remainingAmount]) {
-            uint88 price = uint88(forward[currentRowOffset - 1] - (optval - values[len - 1]));
+            uint88 payment = uint88(forward[currentRowOffset - 1] - (optval - values[len - 1]));
             address bidder = bidders[len - 1];
             if (uint160(bidder) > type(uint8).max) {
-                withdrawableBalance += price;
+                withdrawableBalance += payment;
             }
-            outcomes[bidder] = Outcome({price: price, amount: amounts[len - 1]});
+            outcomes[bidder] = Outcome({payment: payment, amount: amounts[len - 1]});
             remainingAmount -= amounts[len - 1];
         }
         for (uint256 i = len - 2; i > 0; --i) {
@@ -380,22 +382,22 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721 {
                     uint256 m = forward[previousRowLast - j] + backward[nextRowOffset + j];
                     M = m > M ? m : M;
                 }
-                uint88 price = uint88(M - (optval - values[i]));
+                uint88 payment = uint88(M - (optval - values[i]));
                 address bidder = bidders[i];
                 if (uint160(bidder) > type(uint8).max) {
-                    withdrawableBalance += price;
+                    withdrawableBalance += payment;
                 }
-                outcomes[bidder] = Outcome({price: price, amount: amounts[i]});
+                outcomes[bidder] = Outcome({payment: payment, amount: amounts[i]});
                 remainingAmount -= amounts[i];
             }
         }
         if (forward[remainingAmount] > 0) {
-            uint88 price = uint88(backward[2 * stride - 1] - (optval - values[0]));
+            uint88 payment = uint88(backward[2 * stride - 1] - (optval - values[0]));
             address bidder = bidders[0];
             if (uint160(bidder) > type(uint8).max) {
-                withdrawableBalance += price;
+                withdrawableBalance += payment;
             }
-            outcomes[bidder] = Outcome({price: price, amount: amounts[0]});
+            outcomes[bidder] = Outcome({payment: payment, amount: amounts[0]});
             remainingAmount -= amounts[0];
         }
         //        for(uint256 i; i< len; ++i)
@@ -421,7 +423,7 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721 {
     }
 
     function withdrawBalance() external onlyOwner {
-        uint256 amount = withdrawableBalance;
+        uint248 amount = withdrawableBalance;
         withdrawableBalance = 0;
         msg.sender.safeTransferETH(amount);
     }
