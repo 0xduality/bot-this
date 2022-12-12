@@ -82,7 +82,7 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
                                CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
 
-    constructor(string memory _name, string memory _symbol, uint8 _size, uint16 _topBidders, string memory _baseURI) {
+    constructor(string memory _name, string memory _symbol, uint8 _size, uint16 _topBidders) {
         if ((_topBidders & 1) == 1) {
             revert TopBiddersOddError();
         }
@@ -90,6 +90,9 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
         symbol = _symbol;
         collectionSize = _size;
         topBidders = _topBidders;
+    }
+
+    function setURI(string calldata _baseURI) external onlyOwner {
         baseURI = _baseURI;
     }
 
@@ -164,7 +167,7 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
     /// @param bidAmount The amount of the bid.
     /// @param bidValue The value of the bid.
     /// @param nonce The random input used to obfuscate the commitment.
-    function revealBid(uint8 bidAmount, uint88 bidValue, bytes32 nonce) external nonReentrant {
+    function revealBid(bytes32 nonce, uint88 bidValue, uint8 bidAmount) external nonReentrant {
         AuctionInfo memory theAuction = auction;
 
         if (block.timestamp <= theAuction.endOfBiddingPeriod || block.timestamp > theAuction.endOfRevealPeriod) {

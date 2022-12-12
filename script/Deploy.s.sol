@@ -11,7 +11,7 @@ contract Deploy is Script {
     /// @return erc721 The deployed contract
     function run() external returns (BotThis erc721) {
         vm.startBroadcast();
-        erc721 = new BotThis("BotThis", "BT", 10, 2000, "ipfs://foo");
+        erc721 = new BotThis("BotThis", "BT", 100, 2000);
         vm.stopBroadcast();
     }
 }
