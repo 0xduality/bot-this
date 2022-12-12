@@ -8,6 +8,7 @@ import "@solbase/utils/LibString.sol";
 import {ERC721} from "./ERC721.sol";
 import {IBotThisErrors} from "./IBotThisErrors.sol";
 
+import "forge-std/Test.sol";
 
 contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
     using SafeTransferLib for address;
@@ -273,13 +274,130 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
 
         // add dummy buyers at the reserve price
         for (uint8 i = 128; i > 0; i >>= 1) {
-            addRevealedBid(address(uint160(i)), i, i * theAuction.reservePrice);
+            if (i <= collectionSize)
+                addRevealedBid(address(uint160(i)), i, i * theAuction.reservePrice);
         }
 
         auction.status = Status.Finalized;
 
-        vcg();
+        vcg2();
     }
+
+    /// @notice vcg2
+    function vcg2() internal
+    {
+        uint256 len = revealedBids.length < topBidders ? revealedBids.length : topBidders;
+        uint256[] memory values = new uint256[](len);
+        uint8[] memory amounts = new uint8[](len);
+        address[] memory bidders = new address[](len);
+        uint8 stride = collectionSize + 1;
+        for (uint256 i; i<len; ++i){
+            RevealedBid memory rbi = revealedBids[i];
+            bidders[i] = rbi.bidder;
+            values[i] = rbi.value;
+            amounts[i] = rbi.amount;
+        }
+        uint256[] memory forward_table = new uint256[](len*stride);
+        uint8 wi = amounts[0];
+        uint256 vi = values[0];
+        for(uint256 j=wi; j<stride; ++j){
+            forward_table[j] = vi;
+        }
+        uint256 offset = 0;
+        for(uint256 i=1; i<len; ++i){
+            offset += stride;
+            wi = amounts[i];
+            vi = values[i];
+             
+            for(uint256 j; j<wi; ++j){
+                forward_table[offset+j] = forward_table[offset-stride+j];                 
+            }
+            for(uint256 j=wi; j<stride; ++j){
+                uint256 value_without = forward_table[offset-stride+j];
+                uint256 value_with = forward_table[offset-stride+j-wi] + vi;
+                forward_table[offset+j] = value_with > value_without ? value_with : value_without;                 
+            }
+        }
+        uint256[] memory backward_table = new uint256[](len*stride);
+        wi = amounts[len-1];
+        vi = values[len-1];
+        for(uint256 j=wi; j<stride; ++j){
+            backward_table[offset+j] = vi;
+        }
+        for(uint256 i=len-2; ; --i){
+            offset -= stride;
+            wi = amounts[i];
+            vi = values[i];
+
+
+            for(uint256 j; j<wi; ++j){
+                backward_table[offset+j] = backward_table[offset+stride+j];                 
+            }
+            for(uint256 j=wi; j<stride; ++j){
+                uint256 value_without = backward_table[offset+stride+j];
+                uint256 value_with = backward_table[offset+stride+j-wi] + vi;
+                backward_table[offset+j] = value_with > value_without ? value_with : value_without;                 
+            }
+            if (i==0)
+                break;
+        }
+        offset = (len-1)*stride;
+        uint256 remainingAmount = stride - 1;
+        uint256 optval = forward_table[offset+remainingAmount];
+        if (forward_table[offset+remainingAmount] != forward_table[offset-stride+remainingAmount])
+        {
+            uint88 payment = uint88(forward_table[offset - 1] - (optval - values[len - 1]));
+            address bidder = bidders[len - 1];
+            if (uint160(bidder) > type(uint8).max) {
+                withdrawableBalance += payment;
+            }
+            outcomes[bidder] = Outcome({payment: payment, amount: amounts[len - 1]});
+            //payment[bidders[len-1]] = forward_table[offset-1] - (optval - values[len-1]);
+            remainingAmount -= amounts[len-1];
+        }
+        for(uint256 i=len-2; i>0; --i)
+        {
+            offset -= stride;
+            wi = amounts[i];
+            if (forward_table[offset+remainingAmount] != forward_table[offset-stride+remainingAmount])
+            {
+                //remainingAmount -= wi;
+                uint256 M = 0;
+                for(uint256 j; j<stride; ++j)
+                {
+                    uint256 m = forward_table[offset-j-1]+backward_table[offset+stride+j];
+                    if (m > M)
+                        M = m;
+                }
+                uint88 payment = uint88(M - (optval - values[i]));
+                address bidder = bidders[i];
+                if (uint160(bidder) > type(uint8).max) {
+                    withdrawableBalance += payment;
+                }
+                outcomes[bidder] = Outcome({payment: payment, amount: amounts[i]});
+                remainingAmount -= amounts[i];
+                //payment[bidders[i]] = M - (optval - values[i]);
+            }
+        }
+        if (forward_table[remainingAmount] > 0)
+        {
+            uint88 payment = uint88(backward_table[2 * stride - 1] - (optval - values[0]));
+            address bidder = bidders[0];
+            if (uint160(bidder) > type(uint8).max) {
+                withdrawableBalance += payment;
+            }
+            outcomes[bidder] = Outcome({payment: payment, amount: amounts[0]});
+            remainingAmount -= amounts[0];
+
+            //remainingAmount -= amounts[0];
+            //payment[bidders[0]] = backward_table[2*stride-1] - (optval - values[0]);
+        }
+        //for(uint256 i; i< len; ++i)
+        //{
+        //    console.log(i, payment[bidders[i]]);
+        //}
+    }
+
 
     /// @notice vcg
     /// TODO: need to keep track of all the payments so owner can withdraw the correct amount
@@ -358,6 +476,7 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
                 withdrawableBalance += payment;
             }
             outcomes[bidder] = Outcome({payment: payment, amount: amounts[len - 1]});
+            //console.log("o", bidder, outcomes[bidder].payment, outcomes[bidder].amount);
             remainingAmount -= amounts[len - 1];
         }
         for (uint256 i = len - 2; i > 0; --i) {
@@ -377,6 +496,7 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
                     withdrawableBalance += payment;
                 }
                 outcomes[bidder] = Outcome({payment: payment, amount: amounts[i]});
+                //console.log("o", bidder, outcomes[bidder].payment, outcomes[bidder].amount);
                 remainingAmount -= amounts[i];
             }
         }
@@ -387,6 +507,7 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
                 withdrawableBalance += payment;
             }
             outcomes[bidder] = Outcome({payment: payment, amount: amounts[0]});
+            //console.log("o", bidder, outcomes[bidder].payment, outcomes[bidder].amount);
             remainingAmount -= amounts[0];
         }
         //        for(uint256 i; i< len; ++i)
