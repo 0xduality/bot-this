@@ -148,7 +148,7 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
     ///         Value attached to this call is added as collateral for the bid.
     /// @param commitment The commitment to the bid, computed as
     ///        `bytes21(keccak256(abi.encode(nonce, bidValue, bidAmount, address(this))))`.
-    function commitBid(bytes21 commitment) external payable nonReentrant {
+    function commitBid(bytes21 commitment) external payable {
 
         if (commitment == bytes21(0)) {
             revert ZeroCommitmentError();
@@ -231,11 +231,8 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
         }
 
         SealedBid storage bid = sealedBids[msg.sender];
-
-        if (bid.commitment != bytes21(0)) {
-            // Mark as open
-            bid.commitment = bytes21(0);
-        }
+        // Mark as open
+        bid.commitment = bytes21(0);
     }
 
     /// @notice Withdraws collateral.
@@ -248,33 +245,30 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
         if (theAuction.status == Status.Ongoing) {
             revert AuctionNotFinalizedError();
         }
-        Outcome memory outcome = outcomes[msg.sender];
+        uint88 refund = bid.collateral;
         // Return remainder
-        uint88 remainder = bid.collateral - outcome.payment;
-        bid.collateral = 0;
-        msg.sender.safeTransferETH(remainder);
+        if (refund > 0)
+        {
+            refund -= outcomes[msg.sender].payment;
+            bid.collateral = 0;
+            msg.sender.safeTransferETH(refund);
+        }
     }
 
-    function cancelAuction() external nonReentrant {
+    function cancelAuction() external onlyOwner {
         AuctionInfo memory theAuction = auction;
-
-        if (block.timestamp <= theAuction.endOfBiddingPeriod) {
-            revert BidPeriodOngoingError();
-        } else if (block.timestamp <= theAuction.endOfRevealPeriod) {
-            revert RevealPeriodOngoingError();
+        if (theAuction.startTime == 0 || block.timestamp <= theAuction.endOfRevealPeriod) {
+            revert WaitUntilAfterRevealError();
         }
         auction.status = Status.Canceled;
     }
 
     /// @notice Finalizes the auction. Can only do so if the bid reveal
     ///         phase is over.
-    function finalizeAuction() external nonReentrant {
+    function finalizeAuction() external onlyOwner {
         AuctionInfo memory theAuction = auction;
-
-        if (block.timestamp <= auction.endOfBiddingPeriod) {
-            revert BidPeriodOngoingError();
-        } else if (block.timestamp <= auction.endOfRevealPeriod) {
-            revert RevealPeriodOngoingError();
+        if (theAuction.startTime == 0 || block.timestamp <= theAuction.endOfRevealPeriod) {
+            revert WaitUntilAfterRevealError();
         }
 
         // add dummy buyers at the reserve price
@@ -526,8 +520,9 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
             revert AuctionNotFinalizedError();
         }
 
-        Outcome memory outcome = outcomes[msg.sender];
+        Outcome storage outcome = outcomes[msg.sender];
         uint8 amount = outcome.amount;
+        outcome.amount = 0;
         for (uint8 i = 0; i < amount; ++i) {
             uint8 newTokenId = currentTokenId++;
             if (newTokenId > collectionSize) {

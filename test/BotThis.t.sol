@@ -8,23 +8,14 @@ import "@solbase/utils/LibString.sol";
 import {Owned} from "@solbase/auth/Owned.sol";
 
 /*
-
-  "cancelAuction()": "8fa8b790",
   "collectionSize()": "45c0f533",
-  "commitBid(bytes21)": "3bbd3c2f",
-  "createAuction(uint32,uint32,uint32,uint88)": "d4e2590f",
   "currentTokenId()": "009a9b7b",
-  "emergencyReveal()": "1bb6716a",
   "finalizeAuction()": "f77282ab",
   "getApproved(uint256)": "081812fc",
   "isApprovedForAll(address,address)": "e985e9c5",
-  "mint()": "1249c58b",
   "name()": "06fdde03",
-  "outcomes(address)": "927f1833",
   "owner()": "8da5cb5b",
   "ownerOf(uint256)": "6352211e",
-  "revealBid(uint8,uint88,bytes32)": "c4bfdcf1",
-  "revealedBids(uint256)": "ae05377d",
   "safeTransferFrom(address,address,uint256)": "42842e0e",
   "safeTransferFrom(address,address,uint256,bytes)": "b88d4fde",
   "sealedBids(address)": "1402ac15",
@@ -229,5 +220,310 @@ contract BotThisTest is Test,  IBotThisErrors {
         skip(5 hours);
         vm.expectRevert(NotInRevealPeriodError.selector);
         revealBid(bidders[1], nft, nonce[1], bidValue[1], bidAmount[1]);
+    }
+
+    function testSneakyBids() public {
+
+        uint88 reservePrice = 3 ether;
+
+        uint256[] memory collateral = new uint256[](3);
+        bytes32[] memory nonce = new bytes32[](3);
+        uint88[] memory bidValue = new uint88[](3);
+        uint8[] memory bidAmount = new uint8[](3);
+        nonce[0] = bytes32("foo"); nonce[1] = bytes32("bar"); nonce[2] = bytes32("baz");
+        collateral[0] = 6 ether; collateral[1] = 4 ether; collateral[2] = 5 ether; 
+        bidValue[0] = 7 ether; bidValue[1] = 2 ether; bidValue[2] = 4 ether; 
+        bidAmount[0] = 2; bidAmount[1] = 1; bidAmount[2] = 255; 
+
+        vm.prank(deployer);
+        nft.createAuction(uint32(block.timestamp), 2 hours, 2 hours, reservePrice);
+        skip(2 minutes);
+        for(uint i=0; i<3; ++i){
+            require(bidders[i].balance == 10 ether, "Precondition not met");
+            commitBid(bidders[i], nft, collateral[i], nonce[i], bidValue[i], bidAmount[i]);
+            require(bidders[i].balance < 10 ether, "Collateral not posted");
+        }
+        skip(2 hours);
+        for(uint i=0; i<3; ++i) {
+            revealBid(bidders[i], nft, nonce[i], bidValue[i], bidAmount[i]);
+            require(bidders[i].balance == 10 ether, "Sneaky bidder not refunded");
+        }
+    }
+
+    function testEmergencyReveal() public {
+        uint256[] memory collateral = new uint256[](3);
+        bytes32[] memory nonce = new bytes32[](3);
+        uint88[] memory bidValue = new uint88[](3);
+        uint8[] memory bidAmount = new uint8[](3);
+        collateral[0] = 7 ether; collateral[1] = 6 ether; collateral[2] = 4 ether; 
+        nonce[0] = bytes32("foo"); nonce[1] = bytes32("bar"); nonce[2] = bytes32("baz");
+        bidValue[0] = 6 ether; bidValue[1] = 5 ether; bidValue[2] = 2 ether; 
+        bidAmount[0] = 2; bidAmount[1] = 1; bidAmount[2] = 1; 
+
+        uint88 reservePrice = 1 ether;
+        vm.prank(deployer);
+        nft.createAuction(uint32(block.timestamp), 2 hours, 2 hours, reservePrice);
+        skip(2 minutes);
+        for(uint i=0; i<3; ++i)
+            commitBid(bidders[i], nft, collateral[i], nonce[i], bidValue[i], bidAmount[i]);
+        vm.prank(bidders[0]);
+        vm.expectRevert(AuctionNotFinalizedError.selector);
+        nft.emergencyReveal();
+        skip(2 hours);
+        for(uint i=1; i<3; ++i)
+            revealBid(bidders[i], nft, nonce[i], bidValue[i], bidAmount[i]);
+        vm.prank(bidders[0]);
+        vm.expectRevert(AuctionNotFinalizedError.selector);
+        nft.emergencyReveal();
+        skip(2 hours);
+        vm.prank(bidders[0]);
+        vm.expectRevert(AuctionNotFinalizedError.selector);
+        nft.emergencyReveal();
+        vm.prank(deployer);
+        nft.finalizeAuction();
+        vm.prank(bidders[0]);
+        nft.emergencyReveal();
+        for (uint i=0; i<3; ++i)
+        { 
+            withdrawCollateral(bidders[i], nft);
+        }
+        require(bidders[0].balance == 10 ether, "emergencyReveal did not work");
+    }
+
+    function testWithdrawCollateral() public {
+        uint256[] memory collateral = new uint256[](3);
+        bytes32[] memory nonce = new bytes32[](3);
+        uint88[] memory bidValue = new uint88[](3);
+        uint8[] memory bidAmount = new uint8[](3);
+        collateral[0] = 7 ether; collateral[1] = 6 ether; collateral[2] = 4 ether; 
+        nonce[0] = bytes32("foo"); nonce[1] = bytes32("bar"); nonce[2] = bytes32("baz");
+        bidValue[0] = 6 ether; bidValue[1] = 5 ether; bidValue[2] = 2 ether; 
+        bidAmount[0] = 2; bidAmount[1] = 1; bidAmount[2] = 1; 
+
+        uint88 reservePrice = 1 ether;
+
+        vm.expectRevert(AuctionNotFinalizedError.selector);
+        withdrawCollateral(bidders[0], nft);
+        vm.prank(deployer);
+        nft.createAuction(uint32(block.timestamp), 2 hours, 2 hours, reservePrice);
+        skip(2 minutes);
+        vm.expectRevert(AuctionNotFinalizedError.selector);
+        withdrawCollateral(bidders[0], nft);
+        for(uint i=0; i<3; ++i)
+            commitBid(bidders[i], nft, collateral[i], nonce[i], bidValue[i], bidAmount[i]);
+        vm.expectRevert(UnrevealedBidError.selector);
+        withdrawCollateral(bidders[0], nft);
+        skip(2 hours);
+        for(uint i=0; i<3; ++i)
+            revealBid(bidders[i], nft, nonce[i], bidValue[i], bidAmount[i]);
+        vm.expectRevert(AuctionNotFinalizedError.selector);
+        withdrawCollateral(bidders[0], nft);
+        skip(2 hours);
+        vm.expectRevert(AuctionNotFinalizedError.selector);
+        withdrawCollateral(bidders[0], nft);
+        vm.prank(deployer);
+        nft.finalizeAuction();
+
+        for (uint i=0; i<3; ++i)
+        { 
+            withdrawCollateral(bidders[i], nft);
+            withdrawCollateral(bidders[i], nft);
+        }
+    }
+
+    function testCancelAuction() public {
+        uint256[] memory collateral = new uint256[](3);
+        bytes32[] memory nonce = new bytes32[](3);
+        uint88[] memory bidValue = new uint88[](3);
+        uint8[] memory bidAmount = new uint8[](3);
+        collateral[0] = 7 ether; collateral[1] = 6 ether; collateral[2] = 4 ether; 
+        nonce[0] = bytes32("foo"); nonce[1] = bytes32("bar"); nonce[2] = bytes32("baz");
+        bidValue[0] = 6 ether; bidValue[1] = 5 ether; bidValue[2] = 2 ether; 
+        bidAmount[0] = 2; bidAmount[1] = 1; bidAmount[2] = 1; 
+
+        uint88 reservePrice = 1 ether;
+        vm.prank(deployer);
+        vm.expectRevert(WaitUntilAfterRevealError.selector);
+        nft.cancelAuction();
+        vm.prank(deployer);
+        nft.createAuction(uint32(block.timestamp), 2 hours, 2 hours, reservePrice);
+        skip(2 minutes);
+        vm.prank(deployer);
+        vm.expectRevert(WaitUntilAfterRevealError.selector);
+        nft.cancelAuction();
+        for(uint i=0; i<3; ++i)
+            commitBid(bidders[i], nft, collateral[i], nonce[i], bidValue[i], bidAmount[i]);
+        skip(2 hours);
+        vm.prank(deployer);
+        vm.expectRevert(WaitUntilAfterRevealError.selector);
+        nft.cancelAuction();
+        for(uint i=0; i<3; ++i)
+            revealBid(bidders[i], nft, nonce[i], bidValue[i], bidAmount[i]);
+        skip(2 hours);
+        vm.expectRevert(Owned.Unauthorized.selector);
+        nft.cancelAuction();
+        vm.prank(deployer);
+        nft.cancelAuction();
+        vm.expectRevert(AuctionNotFinalizedError.selector);
+        mint(bidders[1], nft);
+        for (uint i=0; i<3; ++i)
+        { 
+            withdrawCollateral(bidders[i], nft);
+            require(bidders[i].balance == 10 ether, "bidder not refunded");
+        }
+        uint256 prevBalance = deployer.balance;
+        vm.prank(deployer);
+        nft.withdrawBalance();
+        require(deployer.balance == prevBalance, "deployer should not make money");
+    }
+
+    function testFinalizeAuction() public {
+        uint256[] memory collateral = new uint256[](3);
+        bytes32[] memory nonce = new bytes32[](3);
+        uint88[] memory bidValue = new uint88[](3);
+        uint8[] memory bidAmount = new uint8[](3);
+        collateral[0] = 7 ether; collateral[1] = 6 ether; collateral[2] = 4 ether; 
+        nonce[0] = bytes32("foo"); nonce[1] = bytes32("bar"); nonce[2] = bytes32("baz");
+        bidValue[0] = 6 ether; bidValue[1] = 5 ether; bidValue[2] = 2 ether; 
+        bidAmount[0] = 2; bidAmount[1] = 1; bidAmount[2] = 1; 
+
+        uint88 reservePrice = 1 ether;
+        vm.prank(deployer);
+        vm.expectRevert(WaitUntilAfterRevealError.selector);
+        nft.finalizeAuction();
+        vm.prank(deployer);
+        nft.createAuction(uint32(block.timestamp), 2 hours, 2 hours, reservePrice);
+        skip(2 minutes);
+        vm.prank(deployer);
+        vm.expectRevert(WaitUntilAfterRevealError.selector);
+        nft.finalizeAuction();
+        for(uint i=0; i<3; ++i)
+            commitBid(bidders[i], nft, collateral[i], nonce[i], bidValue[i], bidAmount[i]);
+        skip(2 hours);
+        vm.prank(deployer);
+        vm.expectRevert(WaitUntilAfterRevealError.selector);
+        nft.finalizeAuction();
+        for(uint i=0; i<3; ++i)
+            revealBid(bidders[i], nft, nonce[i], bidValue[i], bidAmount[i]);
+        skip(2 hours);
+        vm.expectRevert(Owned.Unauthorized.selector);
+        nft.finalizeAuction();        
+        vm.prank(deployer);
+        nft.finalizeAuction();
+        mint(bidders[1], nft);
+        mint(bidders[2], nft);
+        for (uint i=0; i<3; ++i)
+        { 
+            withdrawCollateral(bidders[i], nft);
+        }
+        uint256 prevBalance = deployer.balance;
+        vm.prank(deployer);
+        nft.withdrawBalance();
+    }
+
+    function testMint() public {
+        uint256[] memory collateral = new uint256[](3);
+        bytes32[] memory nonce = new bytes32[](3);
+        uint88[] memory bidValue = new uint88[](3);
+        uint8[] memory bidAmount = new uint8[](3);
+        collateral[0] = 7 ether; collateral[1] = 6 ether; collateral[2] = 4 ether; 
+        nonce[0] = bytes32("foo"); nonce[1] = bytes32("bar"); nonce[2] = bytes32("baz");
+        bidValue[0] = 6 ether; bidValue[1] = 5 ether; bidValue[2] = 2 ether; 
+        bidAmount[0] = 2; bidAmount[1] = 1; bidAmount[2] = 1; 
+
+        uint88 reservePrice = 1 ether;
+        vm.expectRevert(AuctionNotFinalizedError.selector);
+        mint(bidders[1], nft);
+        vm.prank(deployer);
+        nft.createAuction(uint32(block.timestamp), 2 hours, 2 hours, reservePrice);
+        vm.expectRevert(AuctionNotFinalizedError.selector);
+        mint(bidders[1], nft);
+        skip(2 minutes);
+        vm.expectRevert(AuctionNotFinalizedError.selector);
+        mint(bidders[1], nft);
+        for(uint i=0; i<3; ++i)
+            commitBid(bidders[i], nft, collateral[i], nonce[i], bidValue[i], bidAmount[i]);
+        skip(2 hours);
+        vm.expectRevert(AuctionNotFinalizedError.selector);
+        mint(bidders[1], nft);
+        for(uint i=0; i<3; ++i)
+            revealBid(bidders[i], nft, nonce[i], bidValue[i], bidAmount[i]);
+        skip(2 hours);
+        vm.expectRevert(AuctionNotFinalizedError.selector);
+        mint(bidders[1], nft);
+        vm.prank(deployer);
+        nft.finalizeAuction();
+        for (uint i=0; i<2; ++i){
+            mint(bidders[0], nft);
+            require(nft.balanceOf(bidders[0])==0);
+            mint(bidders[1], nft);
+            require(nft.balanceOf(bidders[1])==bidAmount[1]);
+            mint(bidders[2], nft);
+            require(nft.balanceOf(bidders[2])==bidAmount[2]);
+        }
+        for (uint i=0; i<3; ++i)
+        { 
+            withdrawCollateral(bidders[i], nft);
+        }
+        uint256 prevBalance = deployer.balance;
+        vm.prank(deployer);
+        nft.withdrawBalance();
+        require(deployer.balance - prevBalance == 5 ether);
+        require(bidders[0].balance == 10 ether);
+        require(bidders[1].balance == 6 ether);
+        require(bidders[2].balance == 9 ether);
+    }
+
+    function testWithdrawBalance() public {
+        uint256[] memory collateral = new uint256[](3);
+        bytes32[] memory nonce = new bytes32[](3);
+        uint88[] memory bidValue = new uint88[](3);
+        uint8[] memory bidAmount = new uint8[](3);
+        collateral[0] = 7 ether; collateral[1] = 6 ether; collateral[2] = 4 ether; 
+        nonce[0] = bytes32("foo"); nonce[1] = bytes32("bar"); nonce[2] = bytes32("baz");
+        bidValue[0] = 6 ether; bidValue[1] = 5 ether; bidValue[2] = 2 ether; 
+        bidAmount[0] = 2; bidAmount[1] = 1; bidAmount[2] = 1; 
+
+        uint88 reservePrice = 1 ether;
+        vm.prank(deployer);
+        nft.withdrawBalance();
+
+        vm.prank(deployer);
+        nft.createAuction(uint32(block.timestamp), 2 hours, 2 hours, reservePrice);
+                vm.prank(deployer);
+        nft.withdrawBalance();
+
+        skip(2 minutes);
+        for(uint i=0; i<3; ++i)
+            commitBid(bidders[i], nft, collateral[i], nonce[i], bidValue[i], bidAmount[i]);
+        vm.prank(deployer);
+        nft.withdrawBalance();
+
+        skip(2 hours);
+        for(uint i=0; i<3; ++i)
+            revealBid(bidders[i], nft, nonce[i], bidValue[i], bidAmount[i]);
+        vm.prank(deployer);
+        nft.withdrawBalance();
+
+        skip(2 hours);
+        vm.prank(deployer);
+        nft.withdrawBalance();
+
+        vm.prank(deployer);
+        nft.finalizeAuction();
+
+        uint256 prevBalance = deployer.balance;
+        vm.expectRevert(Owned.Unauthorized.selector);
+        nft.withdrawBalance();
+        vm.prank(deployer);
+        nft.withdrawBalance();
+        vm.prank(deployer);
+        nft.withdrawBalance();
+        require(deployer.balance - prevBalance == 5 ether);
+    
+        mint(bidders[1], nft);
+        require(nft.balanceOf(bidders[1])==bidAmount[1]);
+        mint(bidders[2], nft);
+        require(nft.balanceOf(bidders[2])==bidAmount[2]);
     }
 }
