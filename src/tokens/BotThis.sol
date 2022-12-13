@@ -111,6 +111,8 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
     {
         AuctionInfo memory theAuction = auction;
 
+        // TODO: this check is maybe useless. 
+        // The auction will have a staart time, after that time it's not possible to call createAuction 
         if (theAuction.status != Status.Ongoing) {
             revert AlreadyStartedError();
         }
@@ -118,17 +120,17 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
         if (startTime == 0) {
             startTime = uint32(block.timestamp);
         } else if (startTime < block.timestamp) {
-            revert InvalidStartTimeError(startTime);
+            revert InvalidStartTimeError();
         }
         if (bidPeriod < 1 hours) {
-            revert BidPeriodTooShortError(bidPeriod);
+            revert BidPeriodTooShortError();
         }
         if (revealPeriod < 1 hours) {
-            revert RevealPeriodTooShortError(revealPeriod);
+            revert RevealPeriodTooShortError();
         }
         if (theAuction.startTime > 0) {
             if (block.timestamp > theAuction.startTime || theAuction.startTime > startTime) {
-                revert InvalidStartTimeError(startTime);
+                revert InvalidStartTimeError();
             }
         }
         theAuction.startTime = startTime;
@@ -147,6 +149,7 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
     /// @param commitment The commitment to the bid, computed as
     ///        `bytes21(keccak256(abi.encode(nonce, bidValue, bidAmount, address(this))))`.
     function commitBid(bytes21 commitment) external payable nonReentrant {
+
         if (commitment == bytes21(0)) {
             revert ZeroCommitmentError();
         }
@@ -162,6 +165,8 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
         if (msg.value != 0) {
             bid.collateral += uint88(msg.value);
         }
+        if (bid.collateral < theAuction.reservePrice)
+            revert CollateralLessThanReservePriceError();
     }
 
     /// @notice Reveals the value and amount of a bid that was previously committed to.

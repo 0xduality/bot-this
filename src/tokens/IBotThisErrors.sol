@@ -8,13 +8,14 @@ interface IBotThisErrors {
     error AuctionNotFinalizedError();
     error RevealPeriodOngoingError();
     error BidPeriodOngoingError();
-    error BidPeriodTooShortError(uint32 bidPeriod);
-    error RevealPeriodTooShortError(uint32 revealPeriod);
+    error BidPeriodTooShortError();
+    error RevealPeriodTooShortError();
     error NotInRevealPeriodError();
     error NotInBidPeriodError();
     error UnrevealedBidError();
     error ZeroCommitmentError();
     error TotalSupplyExceeded();
-    error InvalidStartTimeError(uint32 startTime);
+    error InvalidStartTimeError();
+    error CollateralLessThanReservePriceError();
     error InvalidOpeningError(bytes21 bidHash, bytes21 commitment);
 }

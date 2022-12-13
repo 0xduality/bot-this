@@ -5,6 +5,7 @@ import "forge-std/Test.sol";
 import "../src/tokens/BotThis.sol";
 import "../src/tokens/IBotThisErrors.sol";
 import "@solbase/utils/LibString.sol";
+import {Owned} from "@solbase/auth/Owned.sol";
 
 /*
 
@@ -98,7 +99,7 @@ contract BotThisTest is Test,  IBotThisErrors {
         nft14 = new BotThis("BotThis", "BT", 3, 14);
     }
 
-    function testHappyScenario() public {
+    function testHappyCase() public {
         uint256[] memory collateral = new uint256[](3);
         bytes32[] memory nonce = new bytes32[](3);
         uint88[] memory bidValue = new uint88[](3);
@@ -135,5 +136,98 @@ contract BotThisTest is Test,  IBotThisErrors {
         require(bidders[0].balance == 10 ether);
         require(bidders[1].balance == 6 ether);
         require(bidders[2].balance == 9 ether);
+    }
+
+    function testOnlyOwnerCreateAuction() public {
+        uint88 reservePrice = 1 ether;
+        vm.expectRevert(Owned.Unauthorized.selector);
+        nft.createAuction(uint32(block.timestamp), 2 hours, 2 hours, reservePrice);
+    }
+
+    function testCreateAuctionMisconfiguration() public {
+        uint88 reservePrice = 1 ether;
+        skip(2 minutes);
+        vm.prank(deployer);        
+        vm.expectRevert(BidPeriodTooShortError.selector);
+        nft.createAuction(uint32(block.timestamp), 2 minutes, 2 hours, reservePrice);
+        vm.prank(deployer);        
+        vm.expectRevert(RevealPeriodTooShortError.selector);
+        nft.createAuction(uint32(block.timestamp), 2 hours, 2 minutes, reservePrice);
+        vm.prank(deployer);
+        vm.expectRevert(InvalidStartTimeError.selector);
+        nft.createAuction(1, 2 hours, 2 hours, reservePrice);
+        vm.prank(deployer);
+        nft.createAuction(0, 2 hours, 2 hours, reservePrice);
+    }
+
+    function testCanOnlyMoveAuctionBackAndBeforeStart() public {
+        uint88 reservePrice = 1 ether;
+        vm.prank(deployer);
+        nft.createAuction(uint32(block.timestamp + 2 hours), 2 hours, 2 hours, reservePrice);
+        skip(30 minutes);
+        vm.prank(deployer);
+        nft.createAuction(uint32(block.timestamp + 2 hours), 2 hours, 2 hours, reservePrice);
+        skip(30 minutes);
+        vm.prank(deployer);
+        vm.expectRevert(InvalidStartTimeError.selector);
+        nft.createAuction(uint32(block.timestamp + 30 minutes), 2 hours, 2 hours, reservePrice);
+        skip(3 hours);
+        vm.prank(deployer);
+        vm.expectRevert(InvalidStartTimeError.selector);
+        nft.createAuction(uint32(block.timestamp + 2 hours), 2 hours, 2 hours, reservePrice);
+    }
+
+    function testBadCommits() public {
+        uint88 reservePrice = 1 ether;
+
+        vm.prank(deployer);
+        nft.createAuction(uint32(block.timestamp + 30 minutes), 2 hours, 2 hours, reservePrice);
+        skip(20 minutes);
+        vm.prank(bidders[0]);
+        vm.expectRevert(NotInBidPeriodError.selector);
+        nft.commitBid{value: 2 ether}(bytes21("commitment"));
+        skip(20 minutes);
+        vm.prank(bidders[0]);
+        vm.expectRevert(ZeroCommitmentError.selector);
+        nft.commitBid{value: 2 ether}(bytes21(0));
+        vm.prank(bidders[0]);
+        vm.expectRevert(CollateralLessThanReservePriceError.selector);
+        nft.commitBid{value: 0 ether}(bytes21("commitment"));
+        skip(5 hours);
+        vm.prank(bidders[0]);
+        vm.expectRevert(NotInBidPeriodError.selector);
+        nft.commitBid{value: 2 ether}(bytes21("commitment"));
+    }
+
+    function testBadReveals() public {
+
+        uint256[] memory collateral = new uint256[](3);
+        bytes32[] memory nonce = new bytes32[](3);
+        uint88[] memory bidValue = new uint88[](3);
+        uint8[] memory bidAmount = new uint8[](3);
+        collateral[0] = 7 ether; collateral[1] = 6 ether; collateral[2] = 4 ether; 
+        nonce[0] = bytes32("foo"); nonce[1] = bytes32("bar"); nonce[2] = bytes32("baz");
+        bidValue[0] = 6 ether; bidValue[1] = 5 ether; bidValue[2] = 2 ether; 
+        bidAmount[0] = 2; bidAmount[1] = 1; bidAmount[2] = 1; 
+
+        uint88 reservePrice = 1 ether;
+
+        vm.prank(deployer);
+        nft.createAuction(uint32(block.timestamp), 2 hours, 2 hours, reservePrice);
+        skip(2 minutes);
+        for(uint i=0; i<3; ++i)
+            commitBid(bidders[i], nft, collateral[i], nonce[i], bidValue[i], bidAmount[i]);
+        skip(2 minutes);
+        vm.expectRevert(NotInRevealPeriodError.selector);
+        revealBid(bidders[0], nft, nonce[0], bidValue[0], bidAmount[0]);
+        skip(2 hours);
+        (bytes21 commitment,) = nft.sealedBids(bidders[0]);
+        bytes21 badNonceCommitment = bytes21(keccak256(abi.encode(nonce[1], bidValue[0], bidAmount[0], address(nft))));
+        vm.expectRevert(abi.encodeWithSelector(InvalidOpeningError.selector, badNonceCommitment, commitment));
+        revealBid(bidders[0], nft, nonce[1], bidValue[0], bidAmount[0]);
+        revealBid(bidders[0], nft, nonce[0], bidValue[0], bidAmount[0]);
+        skip(5 hours);
+        vm.expectRevert(NotInRevealPeriodError.selector);
+        revealBid(bidders[1], nft, nonce[1], bidValue[1], bidAmount[1]);
     }
 }
