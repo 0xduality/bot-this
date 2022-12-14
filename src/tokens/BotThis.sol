@@ -62,7 +62,7 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
     }
 
     /// @dev Representation of an auction outcome. Occupies one slot.
-    /// @param payment payment to be paid.
+    /// @param payment Payment as determined by the VCG auction.
     /// @param amount Amount of items awarded.
     struct Outcome {
         uint88 payment;
@@ -84,7 +84,7 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
     //////////////////////////////////////////////////////////////*/
 
     constructor(string memory _name, string memory _symbol, uint8 _size, uint16 _topBidders) {
-        if ((_topBidders & 1) == 1) {
+        if ((_topBidders & 1) == 0) {
             revert TopBiddersOddError();
         }
         name = _name;
@@ -112,10 +112,10 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
         AuctionInfo memory theAuction = auction;
 
         // TODO: this check is maybe useless. 
-        // The auction will have a staart time, after that time it's not possible to call createAuction 
-        if (theAuction.status != Status.Ongoing) {
-            revert AlreadyStartedError();
-        }
+        // The auction will have a start time, after that time it's not possible to call createAuction 
+        //if (theAuction.status != Status.Ongoing) {
+        //    revert AlreadyStartedError();
+        //}
 
         if (startTime == 0) {
             startTime = uint32(block.timestamp);
@@ -200,10 +200,18 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
             addRevealedBid(msg.sender, bidAmount, bidValue);
             emit BidRevealed(msg.sender, bidValue, bidAmount);
         }
+
+        //console.log("================");
+        //for(uint i=0; i< revealedBids.length; ++i){
+        //    console.log(revealedBids[i].bidder, uint256(revealedBids[i].amount), uint256(revealedBids[i].value));
+        //}
+        //console.log("----------------");
     }
 
     function addRevealedBid(address account, uint8 bidAmount, uint88 bidValue) internal {
+        //console.log("................");
         RevealedBid memory newBid = RevealedBid({bidder: account, amount: bidAmount, value: bidValue});
+
         if (revealedBids.length < topBidders) {
             revealedBids.push(newBid);
             siftDown(revealedBids.length - 1);
@@ -212,7 +220,10 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
             // check whether the bid is has a higher price than the smallest price in topBidders
             // if so move it in the heap of topBidders otherwise just append it
             RevealedBid memory popCandidate = revealedBids[0];
-            if (bidValue * popCandidate.amount > popCandidate.value * bidAmount) {
+            //console.log(newBid.bidder, uint256(newBid.amount), uint256(newBid.value));
+            //console.log(popCandidate.bidder, uint256(popCandidate.amount), uint256(popCandidate.value));
+            if (uint256(bidValue) * uint256(popCandidate.amount) > uint256(popCandidate.value) * uint256(bidAmount)) {
+                //console.log("hot");
                 revealedBids.push(popCandidate);
                 revealedBids[0] = newBid;
                 siftUp();
@@ -220,6 +231,7 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
                 revealedBids.push(newBid);
             }
         }
+        //console.log("................");
     }
 
     /// @notice Allows a user with a sealed bid to open it after the auction was finalized.
@@ -297,44 +309,44 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
             amounts[i] = rbi.amount;
         }
         uint256[] memory forward_table = new uint256[](len*stride);
-        uint8 wi = amounts[0];
-        uint256 vi = values[0];
-        for(uint256 j=wi; j<stride; ++j){
-            forward_table[j] = vi;
+        //uint8 wi = amounts[0];
+        //uint256 vi = values[0];
+        for(uint256 j=amounts[0]; j<stride; ++j){
+            forward_table[j] = values[0];
         }
         uint256 offset = 0;
         for(uint256 i=1; i<len; ++i){
             offset += stride;
-            wi = amounts[i];
-            vi = values[i];
+            //wi = amounts[i];
+            //vi = values[i];
              
-            for(uint256 j; j<wi; ++j){
+            for(uint256 j; j<amounts[i]; ++j){
                 forward_table[offset+j] = forward_table[offset-stride+j];                 
             }
-            for(uint256 j=wi; j<stride; ++j){
+            for(uint256 j=amounts[i]; j<stride; ++j){
                 uint256 value_without = forward_table[offset-stride+j];
-                uint256 value_with = forward_table[offset-stride+j-wi] + vi;
+                uint256 value_with = forward_table[offset-stride+j-amounts[i]] + values[i];
                 forward_table[offset+j] = value_with > value_without ? value_with : value_without;                 
             }
         }
         uint256[] memory backward_table = new uint256[](len*stride);
-        wi = amounts[len-1];
-        vi = values[len-1];
-        for(uint256 j=wi; j<stride; ++j){
-            backward_table[offset+j] = vi;
+        //wi = amounts[len-1];
+        //vi = values[len-1];
+        for(uint256 j=amounts[len-1]; j<stride; ++j){
+            backward_table[offset+j] = values[len-1];
         }
         for(uint256 i=len-2; ; --i){
             offset -= stride;
-            wi = amounts[i];
-            vi = values[i];
+            //wi = amounts[i];
+            //vi = values[i];
 
 
-            for(uint256 j; j<wi; ++j){
+            for(uint256 j; j<amounts[i]; ++j){
                 backward_table[offset+j] = backward_table[offset+stride+j];                 
             }
-            for(uint256 j=wi; j<stride; ++j){
+            for(uint256 j=amounts[i]; j<stride; ++j){
                 uint256 value_without = backward_table[offset+stride+j];
-                uint256 value_with = backward_table[offset+stride+j-wi] + vi;
+                uint256 value_with = backward_table[offset+stride+j-amounts[i]] + values[i];
                 backward_table[offset+j] = value_with > value_without ? value_with : value_without;                 
             }
             if (i==0)
@@ -357,7 +369,7 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
         for(uint256 i=len-2; i>0; --i)
         {
             offset -= stride;
-            wi = amounts[i];
+            //wi = amounts[i];
             if (forward_table[offset+remainingAmount] != forward_table[offset-stride+remainingAmount])
             {
                 //remainingAmount -= wi;
@@ -397,7 +409,7 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
         //}
     }
 
-
+    /*
     /// @notice vcg
     /// TODO: need to keep track of all the payments so owner can withdraw the correct amount
     function vcg() internal {
@@ -514,6 +526,7 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
         //            console.log(i, payments[bidders[i]]);
         //        }
     }
+    */  
 
     function mint() external nonReentrant {
         if (auction.status != Status.Finalized) {
@@ -525,9 +538,9 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
         outcome.amount = 0;
         for (uint8 i = 0; i < amount; ++i) {
             uint8 newTokenId = currentTokenId++;
-            if (newTokenId > collectionSize) {
-                revert TotalSupplyExceeded();
-            } // could only happen if there's a bug in vcg
+            //if (newTokenId > collectionSize) {
+            //    revert TotalSupplyExceeded();
+            //} // could only happen if there's a bug in vcg
             _safeMint(msg.sender, newTokenId);
         }
     }

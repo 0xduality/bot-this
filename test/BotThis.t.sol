@@ -84,10 +84,10 @@ contract BotThisTest is Test,  IBotThisErrors {
             vm.deal(bidderAddy, 10 ether);
             //console.log(bidderName, bidderAddy, bidderAddy.balance);
         }
-        nft = new BotThis("BotThis", "BT", 2, 4);
-        nft10 = new BotThis("BotThis", "BT", 3, 10);
-        nft12 = new BotThis("BotThis", "BT", 3, 12);
-        nft14 = new BotThis("BotThis", "BT", 3, 14);
+        nft = new BotThis("BotThis", "BT", 2, 3);
+        nft10 = new BotThis("BotThis", "BT", 3, 11);
+        nft12 = new BotThis("BotThis", "BT", 3, 13);
+        nft14 = new BotThis("BotThis", "BT", 3, 15);
     }
 
     function testHappyCase() public {
@@ -127,6 +127,9 @@ contract BotThisTest is Test,  IBotThisErrors {
         require(bidders[0].balance == 10 ether);
         require(bidders[1].balance == 6 ether);
         require(bidders[2].balance == 9 ether);
+        vm.prank(deployer);
+        nft.setURI("ipfs://hash/");
+        console.log(nft.tokenURI(0));
     }
 
     function testOnlyOwnerCreateAuction() public {
@@ -416,7 +419,7 @@ contract BotThisTest is Test,  IBotThisErrors {
         { 
             withdrawCollateral(bidders[i], nft);
         }
-        uint256 prevBalance = deployer.balance;
+        //uint256 prevBalance = deployer.balance;
         vm.prank(deployer);
         nft.withdrawBalance();
     }
@@ -490,7 +493,7 @@ contract BotThisTest is Test,  IBotThisErrors {
 
         vm.prank(deployer);
         nft.createAuction(uint32(block.timestamp), 2 hours, 2 hours, reservePrice);
-                vm.prank(deployer);
+        vm.prank(deployer);
         nft.withdrawBalance();
 
         skip(2 minutes);
@@ -526,4 +529,118 @@ contract BotThisTest is Test,  IBotThisErrors {
         mint(bidders[2], nft);
         require(nft.balanceOf(bidders[2])==bidAmount[2]);
     }
+
+
+
+    function testOverCapacity() public {
+        uint256[] memory collateral = new uint256[](6);
+        bytes32[] memory nonce = new bytes32[](6);
+        uint88[] memory bidValue = new uint88[](6);
+        uint8[] memory bidAmount = new uint8[](6);
+        collateral[0] = 7 ether; collateral[1] = 6 ether; collateral[2] = 4 ether; 
+        collateral[3] = 7 ether; collateral[4] = 6 ether; collateral[5] = 4 ether; 
+        nonce[0] = bytes32("foo"); nonce[1] = bytes32("bar"); nonce[2] = bytes32("baz");
+        nonce[3] = bytes32("foo"); nonce[4] = bytes32("bar"); nonce[5] = bytes32("baz");
+        bidValue[0] = 3 ether; bidValue[1] = 3 ether; bidValue[2] = 3 ether;
+        bidValue[3] = 6 ether; bidValue[4] = 5 ether; bidValue[5] = 2 ether;         
+        bidAmount[0] = 2; bidAmount[1] = 2; bidAmount[2] = 2; 
+        bidAmount[3] = 2; bidAmount[4] = 1; bidAmount[5] = 1; 
+
+        uint88 reservePrice = 1 ether;
+        vm.prank(deployer);
+        nft.createAuction(uint32(block.timestamp), 2 hours, 2 hours, reservePrice);
+        skip(2 minutes);
+        for(uint i=0; i<6; ++i)
+            commitBid(bidders[i], nft, collateral[i], nonce[i], bidValue[i], bidAmount[i]);
+        skip(2 hours);
+        for(uint i=0; i<6; ++i)
+            revealBid(bidders[i], nft, nonce[i], bidValue[i], bidAmount[i]);
+        skip(2 hours);
+        vm.prank(deployer);
+        nft.finalizeAuction();
+        for(uint i=0; i<6; ++i){
+            //(uint88 payment, uint8 amount) = nft.outcomes(bidders[i]);
+            mint(bidders[i], nft);
+        }
+        for(uint i=0; i<4; ++i)
+            require(nft.balanceOf(bidders[i])==0);
+        for(uint i=4; i<6; ++i)
+            require(nft.balanceOf(bidders[i])==bidAmount[i]);
+        for (uint i=0; i<6; ++i)
+        { 
+            withdrawCollateral(bidders[i], nft);
+        }
+        uint256 prevBalance = deployer.balance;
+        vm.prank(deployer);
+        nft.withdrawBalance();
+        require(deployer.balance - prevBalance == 5 ether);
+        for(uint i=0; i<4; ++i)
+            require(bidders[i].balance == 10 ether);
+        require(bidders[4].balance == 6 ether);
+        require(bidders[5].balance == 9 ether);
+    }
+
+    function perm(uint256 n, uint256 seed) internal pure returns(uint256[] memory){
+        uint256[] memory p = new uint256[](n);
+        for(uint i=0; i<n; ++i)
+            p[i] = i;
+
+        for (uint i=n-1; i>0; --i){
+            seed = uint256(keccak256(abi.encodePacked(seed)));
+            uint j = seed % (i+1);
+            (p[j], p[i]) = (p[i], p[j]);
+        }
+        return p;
+    }
+
+    function testPermutations(uint256 seed) public {
+        uint256[] memory collateral = new uint256[](6);
+        bytes32[] memory nonce = new bytes32[](6);
+        uint88[] memory bidValue = new uint88[](6);
+        uint8[] memory bidAmount = new uint8[](6);
+        collateral[0] = 7 ether; collateral[1] = 6 ether; collateral[2] = 4 ether; 
+        collateral[3] = 7 ether; collateral[4] = 6 ether; collateral[5] = 4 ether; 
+        nonce[0] = bytes32("foo"); nonce[1] = bytes32("bar"); nonce[2] = bytes32("baz");
+        nonce[3] = bytes32("foo"); nonce[4] = bytes32("bar"); nonce[5] = bytes32("baz");
+        bidValue[0] = 3 ether; bidValue[1] = 3 ether; bidValue[2] = 3 ether;
+        bidValue[3] = 6 ether; bidValue[4] = 5 ether; bidValue[5] = 2 ether;         
+        bidAmount[0] = 2; bidAmount[1] = 2; bidAmount[2] = 2; 
+        bidAmount[3] = 2; bidAmount[4] = 1; bidAmount[5] = 1; 
+
+        uint256[] memory p = perm(6, seed);
+
+        uint88 reservePrice = 1 ether;
+        vm.prank(deployer);
+        nft.createAuction(uint32(block.timestamp), 2 hours, 2 hours, reservePrice);
+        skip(2 minutes);
+        for(uint i=0; i<6; ++i)
+            commitBid(bidders[p[i]], nft, collateral[p[i]], nonce[p[i]], bidValue[p[i]], bidAmount[p[i]]);
+        skip(2 hours);
+        for(uint i=0; i<6; ++i)
+            revealBid(bidders[p[i]], nft, nonce[p[i]], bidValue[p[i]], bidAmount[p[i]]);
+        skip(2 hours);
+        vm.prank(deployer);
+        nft.finalizeAuction();
+        for(uint i=0; i<6; ++i){
+            //(uint88 payment, uint8 amount) = nft.outcomes(bidders[p[i]]);
+            mint(bidders[p[i]], nft);
+        }
+        for(uint i=0; i<4; ++i)
+            require(nft.balanceOf(bidders[i])==0);
+        for(uint i=4; i<6; ++i)
+            require(nft.balanceOf(bidders[i])==bidAmount[i]);
+        for (uint i=0; i<6; ++i)
+        { 
+            withdrawCollateral(bidders[p[i]], nft);
+        }
+        uint256 prevBalance = deployer.balance;
+        vm.prank(deployer);
+        nft.withdrawBalance();
+        require(deployer.balance - prevBalance == 5 ether);
+        for(uint i=0; i<4; ++i)
+            require(bidders[i].balance == 10 ether);
+        require(bidders[4].balance == 6 ether);
+        require(bidders[5].balance == 9 ether);
+    }
+
 }
