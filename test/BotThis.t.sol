@@ -130,6 +130,17 @@ contract BotThisTest is Test,  IBotThisErrors {
         vm.prank(deployer);
         nft.setURI("ipfs://hash/");
         console.log(nft.tokenURI(0));
+        vm.prank(bidders[1]);
+        nft.approve(bidders[0],0);
+        vm.prank(bidders[2]);
+        nft.setApprovalForAll(bidders[0], true);
+        vm.prank(bidders[0]);
+        nft.safeTransferFrom(bidders[1],bidders[0], 0);
+        vm.prank(bidders[0]);
+        nft.safeTransferFrom(bidders[2],bidders[0], 1);
+        require(nft.balanceOf(bidders[0])==2);
+        require(nft.balanceOf(bidders[1])==0);
+        require(nft.balanceOf(bidders[2])==0);
     }
 
     function testOnlyOwnerCreateAuction() public {

@@ -13,6 +13,7 @@ viaIR = true
 remappings = [
   "@forge-std=lib/forge-std/src/",
   "@solbase=lib/solbase/src/",
+  "@solbasetest=lib/solbase/test/",
 ]
 
 # Extreme Fuzzing CI Profile :P

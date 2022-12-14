@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.0;
+pragma solidity ^0.8.4;
 
-abstract contract ERC721 {
-    /*//////////////////////////////////////////////////////////////
-                                 EVENTS
-    //////////////////////////////////////////////////////////////*/
+/// @notice Modern, minimalist, and gas-optimized ERC721 implementation.
+/// @author SolDAO (https://github.com/Sol-DAO/solbase/blob/main/src/tokens/ERC721.sol)
+/// @author Modified from Solmate (https://github.com/transmissions11/solmate/blob/main/src/tokens/ERC721.sol)
+contract ERC721 {
+    /// -----------------------------------------------------------------------
+    /// Events
+    /// -----------------------------------------------------------------------
 
     event Transfer(address indexed from, address indexed to, uint256 indexed id);
 
@@ -12,52 +15,76 @@ abstract contract ERC721 {
 
     event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
 
-    /*//////////////////////////////////////////////////////////////
-                         METADATA STORAGE/LOGIC
-    //////////////////////////////////////////////////////////////*/
+    /// -----------------------------------------------------------------------
+    /// Custom Errors
+    /// -----------------------------------------------------------------------
+
+    error NotMinted();
+
+    error ZeroAddress();
+
+    error NotAuthorized();
+
+    error WrongFrom();
+
+    error InvalidRecipient();
+
+    error UnsafeRecipient();
+
+    error AlreadyMinted();
+
+    /// -----------------------------------------------------------------------
+    /// Metadata Storage/Logic
+    /// -----------------------------------------------------------------------
 
     string public name;
 
     string public symbol;
 
-    function tokenURI(uint256 /*id*/ ) public view virtual returns (string memory) {
-        return "";
-    }
+    function tokenURI(uint256 id) public view virtual returns (string memory) {return ""; }
 
-    /*//////////////////////////////////////////////////////////////
-                      ERC721 BALANCE/OWNER STORAGE
-    //////////////////////////////////////////////////////////////*/
+    /// -----------------------------------------------------------------------
+    /// ERC721 Balance/Owner Storage
+    /// -----------------------------------------------------------------------
 
     mapping(uint256 => address) internal _ownerOf;
 
     mapping(address => uint256) internal _balanceOf;
 
     function ownerOf(uint256 id) public view virtual returns (address owner) {
-        require((owner = _ownerOf[id]) != address(0), "NOT_MINTED");
+        if ((owner = _ownerOf[id]) == address(0)) revert NotMinted();
     }
 
     function balanceOf(address owner) public view virtual returns (uint256) {
-        require(owner != address(0), "ZERO_ADDRESS");
-
+        if (owner == address(0)) revert ZeroAddress();
         return _balanceOf[owner];
     }
 
-    /*//////////////////////////////////////////////////////////////
-                         ERC721 APPROVAL STORAGE
-    //////////////////////////////////////////////////////////////*/
+    /// -----------------------------------------------------------------------
+    /// ERC721 Approval Storage
+    /// -----------------------------------------------------------------------
 
     mapping(uint256 => address) public getApproved;
 
     mapping(address => mapping(address => bool)) public isApprovedForAll;
 
-    /*//////////////////////////////////////////////////////////////
-                              ERC721 LOGIC
-    //////////////////////////////////////////////////////////////*/
+    /// -----------------------------------------------------------------------
+    /// Constructor
+    /// -----------------------------------------------------------------------
+
+    //constructor(string memory _name, string memory _symbol) {
+    //    name = _name;
+    //    symbol = _symbol;
+    //}
+
+    /// -----------------------------------------------------------------------
+    /// ERC721 Logic
+    /// -----------------------------------------------------------------------
 
     function approve(address spender, uint256 id) public virtual {
         address owner = _ownerOf[id];
 
-        require(msg.sender == owner || isApprovedForAll[owner][msg.sender], "NOT_AUTHORIZED");
+        if (msg.sender != owner && !isApprovedForAll[owner][msg.sender]) revert NotAuthorized();
 
         getApproved[id] = spender;
 
@@ -71,13 +98,12 @@ abstract contract ERC721 {
     }
 
     function transferFrom(address from, address to, uint256 id) public virtual {
-        require(from == _ownerOf[id], "WRONG_FROM");
+        if (from != _ownerOf[id]) revert WrongFrom();
 
-        require(to != address(0), "INVALID_RECIPIENT");
+        if (to == address(0)) revert InvalidRecipient();
 
-        require(
-            msg.sender == from || isApprovedForAll[from][msg.sender] || msg.sender == getApproved[id], "NOT_AUTHORIZED"
-        );
+        if (msg.sender != from && !isApprovedForAll[from][msg.sender] && msg.sender != getApproved[id])
+            revert NotAuthorized();
 
         // Underflow of the sender's balance is impossible because we check for
         // ownership above and the recipient's balance can't realistically overflow.
@@ -98,11 +124,10 @@ abstract contract ERC721 {
         transferFrom(from, to, id);
 
         if (to.code.length != 0) {
-            require(
-                ERC721TokenReceiver(to).onERC721Received(msg.sender, from, id, "")
-                    == ERC721TokenReceiver.onERC721Received.selector,
-                "UNSAFE_RECIPIENT"
-            );
+            if (
+                ERC721TokenReceiver(to).onERC721Received(msg.sender, from, id, "") !=
+                ERC721TokenReceiver.onERC721Received.selector
+            ) revert UnsafeRecipient();
         }
     }
 
@@ -110,32 +135,32 @@ abstract contract ERC721 {
         transferFrom(from, to, id);
 
         if (to.code.length != 0) {
-            require(
-                ERC721TokenReceiver(to).onERC721Received(msg.sender, from, id, data)
-                    == ERC721TokenReceiver.onERC721Received.selector,
-                "UNSAFE_RECIPIENT"
-            );
+            if (
+                ERC721TokenReceiver(to).onERC721Received(msg.sender, from, id, data) !=
+                ERC721TokenReceiver.onERC721Received.selector
+            ) revert UnsafeRecipient();
         }
     }
 
-    /*//////////////////////////////////////////////////////////////
-                              ERC165 LOGIC
-    //////////////////////////////////////////////////////////////*/
+    /// -----------------------------------------------------------------------
+    /// ERC165 Logic
+    /// -----------------------------------------------------------------------
 
     function supportsInterface(bytes4 interfaceId) public view virtual returns (bool) {
-        return interfaceId == 0x01ffc9a7 // ERC165 Interface ID for ERC165
-            || interfaceId == 0x80ac58cd // ERC165 Interface ID for ERC721
-            || interfaceId == 0x5b5e139f; // ERC165 Interface ID for ERC721Metadata
+        return
+            interfaceId == 0x01ffc9a7 || // ERC165 Interface ID for ERC165
+            interfaceId == 0x80ac58cd || // ERC165 Interface ID for ERC721
+            interfaceId == 0x5b5e139f; // ERC165 Interface ID for ERC721Metadata
     }
 
-    /*//////////////////////////////////////////////////////////////
-                        INTERNAL MINT/BURN LOGIC
-    //////////////////////////////////////////////////////////////*/
+    /// -----------------------------------------------------------------------
+    /// Internal Mint/Burn Logic
+    /// -----------------------------------------------------------------------
 
     function _mint(address to, uint256 id) internal virtual {
-        require(to != address(0), "INVALID_RECIPIENT");
+        if (to == address(0)) revert InvalidRecipient();
 
-        require(_ownerOf[id] == address(0), "ALREADY_MINTED");
+        if (_ownerOf[id] != address(0)) revert AlreadyMinted();
 
         // Counter overflow is incredibly unrealistic.
         unchecked {
@@ -150,7 +175,7 @@ abstract contract ERC721 {
     function _burn(uint256 id) internal virtual {
         address owner = _ownerOf[id];
 
-        require(owner != address(0), "NOT_MINTED");
+        if (owner == address(0)) revert NotMinted();
 
         // Ownership check above ensures no underflow.
         unchecked {
@@ -164,19 +189,18 @@ abstract contract ERC721 {
         emit Transfer(owner, address(0), id);
     }
 
-    /*//////////////////////////////////////////////////////////////
-                        INTERNAL SAFE MINT LOGIC
-    //////////////////////////////////////////////////////////////*/
+    /// -----------------------------------------------------------------------
+    /// Internal Safe Mint Logic
+    /// -----------------------------------------------------------------------
 
     function _safeMint(address to, uint256 id) internal virtual {
         _mint(to, id);
 
         if (to.code.length != 0) {
-            require(
-                ERC721TokenReceiver(to).onERC721Received(msg.sender, address(0), id, "")
-                    == ERC721TokenReceiver.onERC721Received.selector,
-                "UNSAFE_RECIPIENT"
-            );
+            if (
+                ERC721TokenReceiver(to).onERC721Received(msg.sender, address(0), id, "") !=
+                ERC721TokenReceiver.onERC721Received.selector
+            ) revert UnsafeRecipient();
         }
     }
 
@@ -184,17 +208,17 @@ abstract contract ERC721 {
         _mint(to, id);
 
         if (to.code.length != 0) {
-            require(
-                ERC721TokenReceiver(to).onERC721Received(msg.sender, address(0), id, data)
-                    == ERC721TokenReceiver.onERC721Received.selector,
-                "UNSAFE_RECIPIENT"
-            );
+            if (
+                ERC721TokenReceiver(to).onERC721Received(msg.sender, address(0), id, data) !=
+                ERC721TokenReceiver.onERC721Received.selector
+            ) revert UnsafeRecipient();
         }
     }
 }
 
 /// @notice A generic interface for a contract which properly accepts ERC721 tokens.
-/// @author Solmate (https://github.com/Rari-Capital/solmate/blob/main/src/tokens/ERC721.sol)
+/// @author SolDAO (https://github.com/Sol-DAO/solbase/blob/main/src/tokens/ERC721.sol)
+/// @author Modified from Solmate (https://github.com/transmissions11/solmate/blob/main/src/tokens/ERC721.sol)
 abstract contract ERC721TokenReceiver {
     function onERC721Received(address, address, uint256, bytes calldata) external virtual returns (bytes4) {
         return ERC721TokenReceiver.onERC721Received.selector;
