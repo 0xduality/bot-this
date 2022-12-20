@@ -7,36 +7,6 @@ import "../src/tokens/IBotThisErrors.sol";
 import "@solbase/utils/LibString.sol";
 import {Owned} from "@solbase/auth/Owned.sol";
 
-/*
-  "collectionSize()": "45c0f533",
-  "currentTokenId()": "009a9b7b",
-  "finalizeAuction()": "f77282ab",
-  "getApproved(uint256)": "081812fc",
-  "isApprovedForAll(address,address)": "e985e9c5",
-  "name()": "06fdde03",
-  "owner()": "8da5cb5b",
-  "ownerOf(uint256)": "6352211e",
-  "safeTransferFrom(address,address,uint256)": "42842e0e",
-  "safeTransferFrom(address,address,uint256,bytes)": "b88d4fde",
-  "sealedBids(address)": "1402ac15",
-  "setApprovalForAll(address,bool)": "a22cb465",
-  "setURI(string)": "02fe5305",
-  "supportsInterface(bytes4)": "01ffc9a7",
-  "symbol()": "95d89b41",
-  "tokenURI(uint256)": "c87b56dd",
-  "topBidders()": "b3bedadc",
-  "transferFrom(address,address,uint256)": "23b872dd",
-  "transferOwnership(address)": "f2fde38b",
-  "withdrawBalance()": "5fd8c710",
-  "withdrawCollateral()": "59c153be",
-  "withdrawableBalance()": "e62d64f6"
-
-  "approve(address,uint256)": "095ea7b3",
-  "auction()": "7d9f6db5",
-  "balanceOf(address)": "70a08231",
-  "baseURI()": "6c0360eb",
-*/
-
 contract BotThisTest is Test,  IBotThisErrors {
     using stdStorage for StdStorage;
     using LibString for uint256;
@@ -44,9 +14,7 @@ contract BotThisTest is Test,  IBotThisErrors {
     address[] public bidders;
     address deployer;
     BotThis public nft;
-    BotThis public nft10;
-    BotThis public nft12;
-    BotThis public nft14;
+    BotThis public nftbig;
 
     function commitBid(address from, BotThis to, uint256 collateral, bytes32 nonce, uint88 bidValue, uint8 bidAmount) private returns (bytes21 commitment)
     {
@@ -76,7 +44,7 @@ contract BotThisTest is Test,  IBotThisErrors {
 
     function setUp() public {
         deployer = tx.origin;
-        for (uint256 i=0; i<12; ++i){
+        for (uint256 i=0; i<10; ++i){
             string memory bidderName = string(abi.encodePacked("bidder", i.toString()));
             address bidderAddy = address(uint160(uint256(keccak256(bytes(bidderName))))); 
             bidders.push(bidderAddy);
@@ -85,9 +53,7 @@ contract BotThisTest is Test,  IBotThisErrors {
             //console.log(bidderName, bidderAddy, bidderAddy.balance);
         }
         nft = new BotThis("BotThis", "BT", 2, 3);
-        nft10 = new BotThis("BotThis", "BT", 3, 11);
-        nft12 = new BotThis("BotThis", "BT", 3, 13);
-        nft14 = new BotThis("BotThis", "BT", 3, 15);
+        nftbig = new BotThis("BotThis2", "BT2", 50, 255);
     }
 
     function testHappyCase() public {
@@ -541,8 +507,6 @@ contract BotThisTest is Test,  IBotThisErrors {
         require(nft.balanceOf(bidders[2])==bidAmount[2]);
     }
 
-
-
     function testOverCapacity() public {
         uint256[] memory collateral = new uint256[](6);
         bytes32[] memory nonce = new bytes32[](6);
@@ -654,4 +618,83 @@ contract BotThisTest is Test,  IBotThisErrors {
         require(bidders[5].balance == 9 ether);
     }
 
+    function testLargeScale() public {
+        for (uint256 i=10; i<800; ++i){
+            string memory bidderName = string(abi.encodePacked("bidder", i.toString()));
+            address bidderAddy = address(uint160(uint256(keccak256(bytes(bidderName))))); 
+            bidders.push(bidderAddy);
+            vm.label(bidderAddy, bidderName);
+            vm.deal(bidderAddy, 10 ether);
+            //console.log(bidderName, bidderAddy, bidderAddy.balance);
+        }
+        uint88 maxvalue = 10 ether;
+        bytes32 nonce = bytes32("nonce");
+        uint88[] memory bidValue = new uint88[](800);
+        uint8[] memory bidAmount = new uint8[](800);
+        //optval = 800 + 799 + ... + 751 = 38775 check // 27300 buggy
+        //payment = 750 = 
+        //opt without i = 38775 - i + 750
+        //optval without vi = 38775 - i
+        //payment = "opt without i" - (optval - vi ) = 38775 - i + 750 - (38775 - i) = 750
+        //winners = bidder 751 to 800.
+        for(uint i=0; i< 800; ++i)
+        {
+            bidValue[i] =  uint88(1 + i); //uint88(bytes11(keccak256(abi.encodePacked(bidders[i])))) % maxvalue;
+            bidAmount[i] = 1; // + uint8(bytes1(keccak256(abi.encodePacked(bidValue[i])))) % 10;
+        }
+
+        uint88 reservePrice = 1;
+        vm.prank(deployer);
+        nftbig.createAuction(1, 4 hours, 4 hours, reservePrice);
+        skip(2 minutes);
+        for(uint i=0; i<800; ++i)
+            commitBid(bidders[i], nftbig, maxvalue, nonce, bidValue[i], bidAmount[i]);
+        skip(4 hours);
+        for(uint i=0; i<800; ++i)
+            revealBid(bidders[i], nftbig, nonce, bidValue[i], bidAmount[i]);
+        skip(4 hours);
+
+        if(false){
+            vm.prank(deployer);
+            nftbig.finalizeAuction();
+        }
+        else{
+            uint startgas = gasleft();
+            vm.prank(deployer);
+            nftbig.finalizeAuction1();
+            uint endgas = gasleft();
+            console.log('gas for 1st step', startgas - endgas);
+            startgas = gasleft();
+            vm.prank(deployer);
+            nftbig.finalizeAuction2();
+            endgas = gasleft();
+            console.log('gas for 2nd step', startgas - endgas);
+            startgas = gasleft();
+            vm.prank(deployer);
+            nftbig.finalizeAuction3();
+            endgas = gasleft();
+            console.log('gas for 3rd step', startgas - endgas);
+        }
+        
+        for (uint i=0; i<800; ++i)
+        { 
+            mint(bidders[i], nftbig);
+            withdrawCollateral(bidders[i], nftbig);
+        }
+        uint256 prevBalance = deployer.balance;
+        vm.prank(deployer);
+        nftbig.withdrawBalance();
+        require(deployer.balance - prevBalance == 750*50);
+        for(uint i=0; i<750; ++i)
+        {
+            require(bidders[i].balance == 10 ether, "weird balance");
+            require(nftbig.balanceOf(bidders[i]) == 0, "got nft but should not");
+        }
+        for(uint i=750; i<800; ++i)
+        {
+            uint expected = 10 ether - 750;
+            require(bidders[i].balance == expected, "weird balance");
+            require(nftbig.balanceOf(bidders[i]) == 1, "should have 1 nft");
+        }
+    }
 }

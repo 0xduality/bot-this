@@ -7,7 +7,7 @@
 solc_version = '0.8.16'
 auto_detect_solc = false
 optimizer = true
-optimizer_runs = 1_000
+optimizer_runs = 1_000_000
 fuzz_runs = 1_000
 viaIR = true
 remappings = [
