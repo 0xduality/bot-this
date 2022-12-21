@@ -505,10 +505,6 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
         }
     }
 
-    //function loadTopRevealedBidArray() internal view returns (uint256[] memory output) {
-    //    return loadBytesAsUintArray(topRevealedBids);
-    //}
-
     function forwardFill(uint256[] memory rb) internal view returns (uint256[] memory forward)
     {
         uint256 len = rb.length;
@@ -518,9 +514,9 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
         assembly {
             stride := shl(5, stride)
             let rbPtr := add(rb, 32)
-            let rbData := mload(rbPtr) // low bits to hi bits [vi | wi | bidder]
+            let rbData := mload(rbPtr)                   // low bits to hi bits [vi | wi | bidder]
             let wi := shl(5, and(shr(160, rbData), 255)) // wi = ((rbData >> 160) & 255) << 5
-            let vi := shr(168, rbData) //vi = rbData >> 168 
+            let vi := shr(168, rbData)                   //vi = rbData >> 168 
             let curPtr := add(forward, 32) 
             let breakpoint := add(curPtr, wi)
             let endPtr := add(curPtr, stride)
@@ -565,6 +561,10 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
     /// @notice vcgnew
     function vcgnew() internal 
     {
+        // pointers we absolutely need
+        // rbPtr points to the data vi, wi, bidder
+        // fwdPtr is used for backtracing (starts at the end of the table)
+        // outPtr is used to write out the winners and their payments
         unchecked{
             uint256[] memory rb = loadBytesAsUintArray(topRevealedBids);
             uint256[] memory forward = forwardFill(rb);
@@ -587,16 +587,16 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
 
                 let curPtr := add(curr, 32)
                 let prevPtr := add(prev, 32)
-                let endPtr := add(prevPtr, stride)
-                let breakpoint := sub(endPtr, wi)
+                let endPtr := sub(add(prevPtr, stride), wi)
 
-                for {} lt(prevPtr, breakpoint) 
+                for {} lt(prevPtr, endPtr) 
                 { 
                     prevPtr := add(prevPtr, 32) 
                 }
                 {
                     mstore(prevPtr, vi)
                 }
+                endPtr := add(endPtr, wi)
                 for {} lt(prevPtr, endPtr) 
                 { 
                     prevPtr := add(prevPtr, 32) 
@@ -660,11 +660,10 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
                         fwdPtr := sub(fwdPtr, wi)
                     }
                     curPtr := add(curr, 32)
-                    endPtr := add(curPtr, stride)
-                    breakpoint := sub(endPtr, wi)
+                    endPtr := sub(add(curPtr, stride), wi)
 
                     for {}
-                    lt(curPtr, breakpoint)
+                    lt(curPtr, endPtr)
                     {
                         curPtr := add(curPtr, 32)
                         prevPtr := add(prevPtr, 32)
@@ -676,6 +675,7 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
                         case 0 { mstore(curPtr, valueWithout) }
                         default { mstore(curPtr, valueWith) }
                     }
+                    endPtr := add(endPtr, wi)
                     for {}
                     lt(curPtr, endPtr)
                     {
