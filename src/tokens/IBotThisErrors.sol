@@ -3,6 +3,9 @@ pragma solidity >=0.8.0;
 
 /// @title Custom 
 interface IBotThisErrors {
+    error StepASkippedError();
+    error StepBSkippedError();
+    error StepAlreadyExecutedError();
     error WaitUntilAfterRevealError();
     error AlreadyStartedError();
     error TopBiddersOddError();

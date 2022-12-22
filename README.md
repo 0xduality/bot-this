@@ -1,117 +1,46 @@
-<img align="right" width="150" height="150" top="100" src="./assets/readme.jpg">
+# bot-this • ![license](https://img.shields.io/github/license/0xduality/bot-this?label=license) ![solidity](https://img.shields.io/badge/solidity-^0.8.16-lightgrey)
 
-# femplate • [![ci](https://github.com/abigger87/femplate/actions/workflows/ci.yml/badge.svg)](https://github.com/abigger87/femplate/actions/workflows/ci.yml) ![license](https://img.shields.io/github/license/abigger87/femplate?label=license) ![solidity](https://img.shields.io/badge/solidity-^0.8.15-lightgrey)
-
-A **Clean**, **Robust** Template for Foundry Projects.
+An ERC721 compatible contract that awards NFTs based on a [VCG auction](https://en.wikipedia.org/wiki/Vickrey%E2%80%93Clarke%E2%80%93Groves_auction).
 
 ## Getting Started
 
-Click [`use this template`](https://github.com/abigger87/femplate/generate) to create a new repository with this repo as the initial state.
-
-Or, if your repo already exists, run:
+Assuming you have [foundry](https://getfoundry.sh/) installed
 ```sh
-forge init --template https://github.com/abigger87/femplate
-git submodule update --init --recursive
-forge install
+git clone --recursive https://github.com/0xduality/bot-this
+cd bot-this
+forge test
 ```
-
-Run `./utils/rename.sh` to rename all instances of `femplate` with the name of your project/repository.
 
 ## Blueprint
 
 ```ml
 lib
 ├─ forge-std — https://github.com/foundry-rs/forge-std
-├─ solmate — https://github.com/Rari-Capital/solmate
+├─ solbase — https://github.com/Sol-DAO/solbase
 scripts
-├─ Deploy.s.sol — Simple Deployment Script
+├─ Deploy.s.sol — Simple deployment script
 src
-├─ Greeter — A Minimal Greeter Contract
+├─ BotThis — The NFT contract implementing the auction
+├─ ERC721 — Minimally modified ERC721 base from solbase
+├─ IBotThisErrors — Custom errors
 test
-└─ Greeter.t — Exhaustive Tests
+└─ BotThis.t — Tests
 ```
-
-
-## Development
-
-**Setup**
-```bash
-forge install
-```
-
-**Building**
-```bash
-forge build
-```
-
-**Testing**
-```bash
-forge test
-```
-
-**Deployment & Verification**
-
-Inside the [`utils/`](./utils/) directory are a few preconfigured scripts that can be used to deploy and verify contracts.
-
-Scripts take inputs from the cli, using silent mode to hide any sensitive information.
-
-_NOTE: These scripts are required to be _executable_ meaning they must be made executable by running `chmod +x ./utils/*`._
-
-_NOTE: these scripts will prompt you for the contract name and deployed addresses (when verifying). Also, they use the `-i` flag on `forge` to ask for your private key for deployment. This uses silent mode which keeps your private key from being printed to the console (and visible in logs)._
-
-
-### First time with Forge/Foundry?
-
-See the official Foundry installation [instructions](https://github.com/foundry-rs/foundry/blob/master/README.md#installation).
-
-Then, install the [foundry](https://github.com/foundry-rs/foundry) toolchain installer (`foundryup`) with:
-```bash
-curl -L https://foundry.paradigm.xyz | bash
-```
-
-Now that you've installed the `foundryup` binary,
-anytime you need to get the latest `forge` or `cast` binaries,
-you can run `foundryup`.
-
-So, simply execute:
-```bash
-foundryup
-```
-
-🎉 Foundry is installed! 🎉
-
-
-### Writing Tests with Foundry
-
-With [Foundry](https://github.com/foundry-rs/foundry), all tests are written in Solidity! 🥳
-
-Create a test file for your contract in the `test/` directory.
-
-For example, [`src/Greeter.sol`](./src/Greeter.sol) has its test file defined in [`./test/Greeter.t.sol`](./test/Greeter.t.sol).
-
-To learn more about writing tests in Solidity for Foundry, reference Rari Capital's [solmate](https://github.com/Rari-Capital/solmate/tree/main/src/test) repository created by [@transmissions11](https://twitter.com/transmissions11).
-
-
-### Configure Foundry
-
-Using [foundry.toml](./foundry.toml), Foundry is easily configurable.
-
-For a full list of configuration options, see the Foundry [configuration documentation](https://github.com/foundry-rs/foundry/blob/master/config/README.md#all-options).
-
 
 ## License
 
-[AGPL-3.0-only](https://github.com/abigger87/femplate/blob/master/LICENSE)
+[AGPL-3.0-only](https://github.com/0xduality/bot-this/blob/main/LICENSE)
 
 
 ## Acknowledgements
 
+The following projects had a substantial influence in the development of this project.
+
+- [auction-zoo](https://github.com/a16z/auction-zoo)
 - [femplate](https://github.com/abigger87/femplate)
 - [foundry](https://github.com/foundry-rs/foundry)
-- [solmate](https://github.com/Rari-Capital/solmate)
+- [solbase](https://github.com/Sol-DAO/solmate)
 - [forge-std](https://github.com/brockelmore/forge-std)
-- [forge-template](https://github.com/foundry-rs/forge-template)
-- [foundry-toolchain](https://github.com/foundry-rs/foundry-toolchain)
 
 
 ## Disclaimer

@@ -661,17 +661,17 @@ contract BotThisTest is Test,  IBotThisErrors {
         else{
             uint startgas = gasleft();
             vm.prank(deployer);
-            nftbig.finalizeAuction1();
+            nftbig.finalizeAuctionStepA();
             uint endgas = gasleft();
             console.log('gas for 1st step', startgas - endgas);
             startgas = gasleft();
             vm.prank(deployer);
-            nftbig.finalizeAuction2();
+            nftbig.finalizeAuctionStepB();
             endgas = gasleft();
             console.log('gas for 2nd step', startgas - endgas);
             startgas = gasleft();
             vm.prank(deployer);
-            nftbig.finalizeAuction3();
+            nftbig.finalizeAuctionStepC();
             endgas = gasleft();
             console.log('gas for 3rd step', startgas - endgas);
         }
