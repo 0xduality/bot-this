@@ -41,7 +41,9 @@ contract ERC721 {
 
     string public symbol;
 
-    function tokenURI(uint256 /*id*/) public view virtual returns (string memory) {return ""; }
+    function tokenURI(uint256 /*id*/ ) public view virtual returns (string memory) {
+        return "";
+    }
 
     /// -----------------------------------------------------------------------
     /// ERC721 Balance/Owner Storage
@@ -102,8 +104,9 @@ contract ERC721 {
 
         if (to == address(0)) revert InvalidRecipient();
 
-        if (msg.sender != from && !isApprovedForAll[from][msg.sender] && msg.sender != getApproved[id])
+        if (msg.sender != from && !isApprovedForAll[from][msg.sender] && msg.sender != getApproved[id]) {
             revert NotAuthorized();
+        }
 
         // Underflow of the sender's balance is impossible because we check for
         // ownership above and the recipient's balance can't realistically overflow.
@@ -125,8 +128,8 @@ contract ERC721 {
 
         if (to.code.length != 0) {
             if (
-                ERC721TokenReceiver(to).onERC721Received(msg.sender, from, id, "") !=
-                ERC721TokenReceiver.onERC721Received.selector
+                ERC721TokenReceiver(to).onERC721Received(msg.sender, from, id, "")
+                    != ERC721TokenReceiver.onERC721Received.selector
             ) revert UnsafeRecipient();
         }
     }
@@ -136,8 +139,8 @@ contract ERC721 {
 
         if (to.code.length != 0) {
             if (
-                ERC721TokenReceiver(to).onERC721Received(msg.sender, from, id, data) !=
-                ERC721TokenReceiver.onERC721Received.selector
+                ERC721TokenReceiver(to).onERC721Received(msg.sender, from, id, data)
+                    != ERC721TokenReceiver.onERC721Received.selector
             ) revert UnsafeRecipient();
         }
     }
@@ -147,10 +150,9 @@ contract ERC721 {
     /// -----------------------------------------------------------------------
 
     function supportsInterface(bytes4 interfaceId) public view virtual returns (bool) {
-        return
-            interfaceId == 0x01ffc9a7 || // ERC165 Interface ID for ERC165
-            interfaceId == 0x80ac58cd || // ERC165 Interface ID for ERC721
-            interfaceId == 0x5b5e139f; // ERC165 Interface ID for ERC721Metadata
+        return interfaceId == 0x01ffc9a7 // ERC165 Interface ID for ERC165
+            || interfaceId == 0x80ac58cd // ERC165 Interface ID for ERC721
+            || interfaceId == 0x5b5e139f; // ERC165 Interface ID for ERC721Metadata
     }
 
     /// -----------------------------------------------------------------------
@@ -198,8 +200,8 @@ contract ERC721 {
 
         if (to.code.length != 0) {
             if (
-                ERC721TokenReceiver(to).onERC721Received(msg.sender, address(0), id, "") !=
-                ERC721TokenReceiver.onERC721Received.selector
+                ERC721TokenReceiver(to).onERC721Received(msg.sender, address(0), id, "")
+                    != ERC721TokenReceiver.onERC721Received.selector
             ) revert UnsafeRecipient();
         }
     }
@@ -209,8 +211,8 @@ contract ERC721 {
 
         if (to.code.length != 0) {
             if (
-                ERC721TokenReceiver(to).onERC721Received(msg.sender, address(0), id, data) !=
-                ERC721TokenReceiver.onERC721Received.selector
+                ERC721TokenReceiver(to).onERC721Received(msg.sender, address(0), id, data)
+                    != ERC721TokenReceiver.onERC721Received.selector
             ) revert UnsafeRecipient();
         }
     }

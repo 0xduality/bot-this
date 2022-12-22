@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity >=0.8.0;
 
-/// @title Custom 
+/// @title Custom
 interface IBotThisErrors {
     error StepASkippedError();
     error StepBSkippedError();
