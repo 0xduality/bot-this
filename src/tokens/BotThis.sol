@@ -20,7 +20,13 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
     //////////////////////////////////////////////////////////////*/
 
     event AuctionCreated(uint32 startTime, uint32 bidPeriod, uint32 revealPeriod, uint88 reservePrice);
+    event AuctionCanceled();
+    event AuctionFinalized();
+    event BidCommited(address indexed sender, uint88 collateral, bytes21 commitment);
     event BidRevealed(address indexed sender, uint88 bidValue, uint8 bidAmount);
+
+
+    // Possibly add events for withdrawCollateral, withdrawBalance, and emergencyReveal
 
     /*//////////////////////////////////////////////////////////////
                          METADATA STORAGE/LOGIC
@@ -159,12 +165,14 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
 
         SealedBid storage bid = sealedBids[msg.sender];
         bid.commitment = commitment;
+        uint88 value = uint88(msg.value);
         if (msg.value != 0) {
-            bid.collateral += uint88(msg.value);
+            bid.collateral += value;
         }
         if (bid.collateral < theAuction.reservePrice) {
             revert CollateralLessThanReservePriceError();
         }
+        emit BidCommited(msg.sender, value, commitment);
     }
 
     /// @notice Reveals the value and amount of a bid that was previously committed to.
@@ -270,6 +278,7 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
             revert WaitUntilAfterRevealError();
         }
         auction.status = Status.Canceled;
+        emit AuctionCanceled();
     }
 
     /// @dev Allocates an array without initializing the memory. Saves a bit of gas compared to new.
@@ -373,6 +382,7 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
         }
         withdrawableBalance = uint88(totalPayments);
         auction.status = Status.Finalized;
+        emit AuctionFinalized();
     }
 
     /// @notice Step C of auction finalization.
@@ -688,17 +698,23 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
             uint256 rightpos = leftpos + 1;
             RevealedBid memory left = revealedBids[leftpos];
             RevealedBid memory right = revealedBids[rightpos];
-            if (left.value * right.amount < right.value * left.amount) {
-                revealedBids[pos] = left;
-                pos = leftpos;
-            } else {
-                revealedBids[pos] = right;
-                pos = rightpos;
+            uint256 minpos = (left.value * right.amount < right.value * left.amount) ? leftpos : rightpos;
+            RevealedBid memory minItem = minpos == leftpos ? left : right; 
+
+            if (newItem.value * minItem.amount < minItem.value * newItem.amount) {
+                // pos is the right place to insert newItem
+                break;
             }
-            leftpos = (pos << 1) + 1;
+            else {
+                // move the min item to the parent recurse on minpos
+                revealedBids[pos] = minItem;
+                pos = minpos;
+                leftpos = (pos << 1) + 1;
+            }
         }
-        // The leaf at pos is empty now.  Put newItem there, and bubble it up to its final resting place (by sifting its parents down).
+        // pos now points either to a leaf or an empty internal node 
+        // whose both children are smaller than newItem
+        // we can insert newItem here
         revealedBids[pos] = newItem;
-        siftDown(pos);
     }
 }

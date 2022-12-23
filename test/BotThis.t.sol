@@ -52,7 +52,7 @@ contract BotThisTest is Test, IBotThisErrors {
             //console.log(bidderName, bidderAddy, bidderAddy.balance);
         }
         nft = new BotThis("BotThis", "BT", 2, 3);
-        nftbig = new BotThis("BotThis2", "BT2", 50, 255);
+        nftbig = new BotThis("BotThis2", "BT2", 69, 511);
     }
 
     function testHappyCase() public {
@@ -750,8 +750,8 @@ contract BotThisTest is Test, IBotThisErrors {
         bytes32 nonce = bytes32("nonce");
         uint88[] memory bidValue = new uint88[](800);
         uint8[] memory bidAmount = new uint8[](800);
-        //optval = 800 + 799 + ... + 751 = 38775 check // 27300 buggy
-        //payment = 750 =
+        //optval = 800 + 799 + ... + 751 = 38775 
+        //payment = 750
         //opt without i = 38775 - i + 750
         //optval without vi = 38775 - i
         //payment = "opt without i" - (optval - vi ) = 38775 - i + 750 - (38775 - i) = 750
@@ -802,13 +802,15 @@ contract BotThisTest is Test, IBotThisErrors {
         uint256 prevBalance = deployer.balance;
         vm.prank(deployer);
         nftbig.withdrawBalance();
-        require(deployer.balance - prevBalance == 750 * 50);
-        for (uint256 i = 0; i < 750; ++i) {
+
+        uint256 N = nftbig.collectionSize();
+        require(deployer.balance - prevBalance == (800 - N) * N);
+        for (uint256 i = 0; i < 800 - N; ++i) {
             require(bidders[i].balance == 10 ether, "weird balance");
             require(nftbig.balanceOf(bidders[i]) == 0, "got nft but should not");
         }
-        for (uint256 i = 750; i < 800; ++i) {
-            uint256 expected = 10 ether - 750;
+        for (uint256 i = 800 - N; i < 800; ++i) {
+            uint256 expected = 10 ether - (800 - N);
             require(bidders[i].balance == expected, "weird balance");
             require(nftbig.balanceOf(bidders[i]) == 1, "should have 1 nft");
         }
