@@ -25,7 +25,6 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
     event BidCommited(address indexed sender, uint88 collateral, bytes21 commitment);
     event BidRevealed(address indexed sender, uint88 bidValue, uint8 bidAmount);
 
-
     // Possibly add events for withdrawCollateral, withdrawBalance, and emergencyReveal
 
     /*//////////////////////////////////////////////////////////////
@@ -699,20 +698,19 @@ contract BotThis is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {
             RevealedBid memory left = revealedBids[leftpos];
             RevealedBid memory right = revealedBids[rightpos];
             uint256 minpos = (left.value * right.amount < right.value * left.amount) ? leftpos : rightpos;
-            RevealedBid memory minItem = minpos == leftpos ? left : right; 
+            RevealedBid memory minItem = minpos == leftpos ? left : right;
 
             if (newItem.value * minItem.amount < minItem.value * newItem.amount) {
                 // pos is the right place to insert newItem
                 break;
-            }
-            else {
+            } else {
                 // move the min item to the parent recurse on minpos
                 revealedBids[pos] = minItem;
                 pos = minpos;
                 leftpos = (pos << 1) + 1;
             }
         }
-        // pos now points either to a leaf or an empty internal node 
+        // pos now points either to a leaf or an empty internal node
         // whose both children are smaller than newItem
         // we can insert newItem here
         revealedBids[pos] = newItem;

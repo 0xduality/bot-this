@@ -41,13 +41,11 @@ contract BotThisSimpleTest is Test, IBotThisErrors {
         to.withdrawCollateral();
     }
 
-
     function setUp() public {
-
         //nft = new BotThisSimple("BotThisSimple", "BTS");
         nft = new BotThisSimple("BotThisSimple", "BTS", 2);
         nftbig = new BotThisSimple("BotThis2", "BT2", 69);
-        
+
         deployer = tx.origin;
         for (uint256 i = 0; i < 10; ++i) {
             string memory bidderName = string(abi.encodePacked("bidder", i.toString()));
@@ -57,7 +55,6 @@ contract BotThisSimpleTest is Test, IBotThisErrors {
             vm.deal(bidderAddy, 10 ether);
             //console.log(bidderName, bidderAddy, bidderAddy.balance);
         }
-
     }
 
     function testHappyCase() public {
@@ -184,7 +181,6 @@ contract BotThisSimpleTest is Test, IBotThisErrors {
         nft.commitBid{value: 2 ether}(bytes20("commitment"));
     }
 
-
     function testBadReveals() public {
         uint256[] memory collateral = new uint256[](3);
         bytes32[] memory nonce = new bytes32[](3);
@@ -249,7 +245,6 @@ contract BotThisSimpleTest is Test, IBotThisErrors {
         }
     }
 
-
     function testEmergencyReveal() public {
         uint256[] memory collateral = new uint256[](3);
         bytes32[] memory nonce = new bytes32[](3);
@@ -294,7 +289,6 @@ contract BotThisSimpleTest is Test, IBotThisErrors {
         }
         require(bidders[0].balance == 10 ether, "emergencyReveal did not work");
     }
-
 
     function testWithdrawCollateral() public {
         uint256[] memory collateral = new uint256[](3);
@@ -341,7 +335,6 @@ contract BotThisSimpleTest is Test, IBotThisErrors {
             withdrawCollateral(bidders[i], nft);
         }
     }
-
 
     function testCancelAuction() public {
         uint256[] memory collateral = new uint256[](3);
@@ -393,7 +386,6 @@ contract BotThisSimpleTest is Test, IBotThisErrors {
         nft.withdrawBalance();
         require(deployer.balance == prevBalance, "deployer should not make money");
     }
-
 
     function testFinalizeAuction() public {
         uint256[] memory collateral = new uint256[](3);
@@ -561,7 +553,6 @@ contract BotThisSimpleTest is Test, IBotThisErrors {
         require(nft.balanceOf(bidders[1]) == 1);
     }
 
-
     function testOverCapacity() public {
         uint256[] memory collateral = new uint256[](6);
         bytes32[] memory nonce = new bytes32[](6);
@@ -599,7 +590,7 @@ contract BotThisSimpleTest is Test, IBotThisErrors {
         }
         skip(2 hours);
         vm.prank(deployer);
-        nft.finalizeAuction(); 
+        nft.finalizeAuction();
         for (i = 0; i < 6; ++i) {
             //(uint96 payment, uint8 amount) = nft.outcomes(bidders[i]);
             mint(bidders[i], nft);
@@ -703,7 +694,6 @@ contract BotThisSimpleTest is Test, IBotThisErrors {
         require(bidders[5].balance == 8 ether);
     }
 
-
     function testLargeScale() public {
         for (uint256 i = 10; i < 800; ++i) {
             string memory bidderName = string(abi.encodePacked("bidder", i.toString()));
@@ -715,7 +705,7 @@ contract BotThisSimpleTest is Test, IBotThisErrors {
         uint96 maxvalue = 10 ether;
         bytes32 nonce = bytes32("nonce");
         uint96[] memory bidValue = new uint96[](800);
-        //optval = 800 + 799 + ... + 751 = 38775 
+        //optval = 800 + 799 + ... + 751 = 38775
         //payment = 750
         //opt without i = 38775 - i + 750
         //optval without vi = 38775 - i
@@ -737,7 +727,6 @@ contract BotThisSimpleTest is Test, IBotThisErrors {
             revealBid(bidders[i], nftbig, nonce, bidValue[i]);
         }
         skip(4 hours);
-
 
         vm.prank(deployer);
         nftbig.finalizeAuction();
@@ -762,5 +751,5 @@ contract BotThisSimpleTest is Test, IBotThisErrors {
             require(nftbig.balanceOf(bidders[i]) == 1, "should have 1 nft");
         }
     }
-/*    */
+    /*    */
 }

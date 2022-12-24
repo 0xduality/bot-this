@@ -41,7 +41,6 @@ contract BotThisTest is Test, IBotThisErrors {
         to.withdrawCollateral();
     }
 
-
     function setUp() public {
         deployer = tx.origin;
         for (uint256 i = 0; i < 10; ++i) {
@@ -751,7 +750,7 @@ contract BotThisTest is Test, IBotThisErrors {
         bytes32 nonce = bytes32("nonce");
         uint88[] memory bidValue = new uint88[](800);
         uint8[] memory bidAmount = new uint8[](800);
-        //optval = 800 + 799 + ... + 751 = 38775 
+        //optval = 800 + 799 + ... + 751 = 38775
         //payment = 750
         //opt without i = 38775 - i + 750
         //optval without vi = 38775 - i

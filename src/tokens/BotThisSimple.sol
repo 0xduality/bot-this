@@ -26,7 +26,6 @@ contract BotThisSimple is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErr
     event BidCommited(address indexed sender, uint96 collateral, bytes20 commitment);
     event BidRevealed(address indexed sender, uint96 bidValue);
 
-
     // Possibly add events for withdrawCollateral, withdrawBalance, and emergencyReveal
 
     /*//////////////////////////////////////////////////////////////
@@ -87,7 +86,6 @@ contract BotThisSimple is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErr
         symbol = _symbol;
         collectionSize = _size;
     }
-
 
     /// @notice Sets the token URI
     function setURI(string calldata _baseURI) external onlyOwner {
@@ -201,7 +199,7 @@ contract BotThisSimple is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErr
     /// @param bidValue The value of the bid.
     function addRevealedBid(address account, uint96 bidValue) internal {
         RevealedBid memory newBid = RevealedBid({bidder: account, value: bidValue});
-        if (revealedBids.length < collectionSize+1) {
+        if (revealedBids.length < collectionSize + 1) {
             revealedBids.push(newBid);
             siftDown(revealedBids.length - 1);
             winners[account] = 2;
@@ -249,7 +247,7 @@ contract BotThisSimple is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErr
         uint96 refund = bid.collateral;
         // Return remainder
         if (refund > 0) {
-            if (winners[msg.sender] > 1){
+            if (winners[msg.sender] > 1) {
                 refund -= mintPrice;
             }
             bid.collateral = 0;
@@ -276,13 +274,10 @@ contract BotThisSimple is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErr
         }
         RevealedBid memory minimumInHeap = revealedBids[0];
         uint256 len = revealedBids.length;
-        if (len <= collectionSize)
-        {
+        if (len <= collectionSize) {
             mintPrice = theAuction.reservePrice;
             withdrawableBalance = uint96(len * theAuction.reservePrice);
-        }
-        else 
-        {
+        } else {
             mintPrice = minimumInHeap.value;
             withdrawableBalance = uint96(collectionSize * minimumInHeap.value);
             winners[minimumInHeap.bidder] = 1;
@@ -296,7 +291,7 @@ contract BotThisSimple is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErr
         if (auction.status != Status.Finalized) {
             revert AuctionNotFinalizedError();
         }
-        if (winners[msg.sender] == 2){
+        if (winners[msg.sender] == 2) {
             winners[msg.sender] = 3;
             _safeMint(msg.sender, currentTokenId++);
         }
@@ -339,30 +334,28 @@ contract BotThisSimple is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErr
         RevealedBid memory newItem = revealedBids[pos];
         uint256 leftpos = (pos << 1) + 1;
         while (leftpos < endpos) {
-
             RevealedBid memory left = revealedBids[leftpos];
             uint256 minpos = leftpos;
             RevealedBid memory minItem = left;
             uint256 rightpos = leftpos + 1;
-            if (rightpos < endpos){
+            if (rightpos < endpos) {
                 RevealedBid memory right = revealedBids[rightpos];
                 if (right.value < left.value) {
                     minpos = rightpos;
-                    minItem = right; 
+                    minItem = right;
                 }
             }
             if (newItem.value < minItem.value) {
                 // pos is the right place to insert newItem
                 break;
-            }
-            else {
+            } else {
                 // move the min item to the parent recurse on minpos
                 revealedBids[pos] = minItem;
                 pos = minpos;
                 leftpos = (pos << 1) + 1;
             }
         }
-        // pos now points either to a leaf or an empty internal node 
+        // pos now points either to a leaf or an empty internal node
         // whose both children are smaller than newItem
         // we can insert newItem here
         revealedBids[pos] = newItem;
