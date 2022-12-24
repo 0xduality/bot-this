@@ -22,4 +22,5 @@ interface IBotThisErrors {
     error InvalidStartTimeError();
     error CollateralLessThanReservePriceError();
     error InvalidOpeningError(bytes21 bidHash, bytes21 commitment);
+    error InvalidSimpleOpeningError(bytes20 bidHash, bytes20 commitment);
 }
