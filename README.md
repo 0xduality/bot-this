@@ -29,6 +29,14 @@ cd bot-this
 forge test
 ```
 
+You can deploy on chain by creating an `.env` file (copy .env.example and fill out the details) and calling 
+```sh
+yarn deploy-simple
+yarn deploy
+```
+to deploy BotThisSimple or BotThis respectively.
+
+
 ## Overview of Operations
 
 The two contracts are pretty similar. At deployment time we specify the size of the collection (and the amount of top bidders for 
@@ -58,8 +66,6 @@ Currently, if the collection is not sold out via the auction it is impossible to
 lib
 ├─ forge-std — https://github.com/foundry-rs/forge-std
 ├─ solbase — https://github.com/Sol-DAO/solbase
-scripts
-├─ Deploy.s.sol — Simple deployment script
 src
 ├─ BotThis — The NFT contract implementing the full VCG auction
 ├─ BotThisSimple — The NFT contract implementing a simplified auction
@@ -73,7 +79,6 @@ test
 ## License
 
 [AGPL-3.0-only](https://github.com/0xduality/bot-this/blob/main/LICENSE)
-
 
 ## Acknowledgements
 
