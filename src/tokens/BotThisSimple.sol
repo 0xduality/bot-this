@@ -74,7 +74,7 @@ contract BotThisSimple is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErr
     // ====
     string public baseURI;
     mapping(address => SealedBid) public sealedBids;
-    mapping(address => uint256) public winners;
+    mapping(address => uint256) public winners; // 0 = not considered, 1 = considered but not winning, 2 = winner not yet minted 3 = winner already minted
     RevealedBid[] public revealedBids;
 
     /*//////////////////////////////////////////////////////////////

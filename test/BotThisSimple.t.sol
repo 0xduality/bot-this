@@ -44,7 +44,7 @@ contract BotThisSimpleTest is Test, IBotThisErrors {
     function setUp() public {
         //nft = new BotThisSimple("BotThisSimple", "BTS");
         nft = new BotThisSimple("BotThisSimple", "BTS", 2);
-        nftbig = new BotThisSimple("BotThis2", "BT2", 69);
+        nftbig = new BotThisSimple("BotThis2", "BT2", 10000);
 
         deployer = tx.origin;
         for (uint256 i = 0; i < 10; ++i) {
@@ -695,7 +695,7 @@ contract BotThisSimpleTest is Test, IBotThisErrors {
     }
 
     function testLargeScale() public {
-        for (uint256 i = 10; i < 800; ++i) {
+        for (uint256 i = 10; i < 11000; ++i) {
             string memory bidderName = string(abi.encodePacked("bidder", i.toString()));
             address bidderAddy = address(uint160(uint256(keccak256(bytes(bidderName)))));
             bidders.push(bidderAddy);
@@ -704,14 +704,9 @@ contract BotThisSimpleTest is Test, IBotThisErrors {
         }
         uint96 maxvalue = 10 ether;
         bytes32 nonce = bytes32("nonce");
-        uint96[] memory bidValue = new uint96[](800);
-        //optval = 800 + 799 + ... + 751 = 38775
-        //payment = 750
-        //opt without i = 38775 - i + 750
-        //optval without vi = 38775 - i
-        //payment = "opt without i" - (optval - vi ) = 38775 - i + 750 - (38775 - i) = 750
-        //winners = bidder 751 to 800.
-        for (uint256 i = 0; i < 800; ++i) {
+        uint96[] memory bidValue = new uint96[](11000);
+
+        for (uint256 i = 0; i < 11000; ++i) {
             bidValue[i] = uint96(1 + i); //uint96(bytes11(keccak256(abi.encodePacked(bidders[i])))) % maxvalue;
         }
 
@@ -719,19 +714,21 @@ contract BotThisSimpleTest is Test, IBotThisErrors {
         vm.prank(deployer);
         nftbig.createAuction(1, 4 hours, 4 hours, reservePrice);
         skip(2 minutes);
-        for (uint256 i = 0; i < 800; ++i) {
+        for (uint256 i = 0; i < 11000; ++i) {
             commitBid(bidders[i], nftbig, maxvalue, nonce, bidValue[i]);
         }
         skip(4 hours);
-        for (uint256 i = 0; i < 800; ++i) {
+        for (uint256 i = 0; i < 11000; ++i) {
             revealBid(bidders[i], nftbig, nonce, bidValue[i]);
         }
         skip(4 hours);
 
         vm.prank(deployer);
+        uint s = gasleft();
         nftbig.finalizeAuction();
+        console.log("Simple Finalization gas", s-gasleft());
 
-        for (uint256 i = 0; i < 800; ++i) {
+        for (uint256 i = 0; i < 11000; ++i) {
             mint(bidders[i], nftbig);
             withdrawCollateral(bidders[i], nftbig);
         }
@@ -740,13 +737,13 @@ contract BotThisSimpleTest is Test, IBotThisErrors {
         nftbig.withdrawBalance();
 
         uint256 N = nftbig.collectionSize();
-        require(deployer.balance - prevBalance == (800 - N) * N);
-        for (uint256 i = 0; i < 800 - N; ++i) {
+        require(deployer.balance - prevBalance == (11000 - N) * N);
+        for (uint256 i = 0; i < 11000 - N; ++i) {
             require(bidders[i].balance == maxvalue, "weird balance loser");
             require(nftbig.balanceOf(bidders[i]) == 0, "got nft but should not");
         }
-        for (uint256 i = 800 - N; i < 800; ++i) {
-            uint256 expected = maxvalue - (800 - N);
+        for (uint256 i = 11000 - N; i < 11000; ++i) {
+            uint256 expected = maxvalue - (11000 - N);
             require(bidders[i].balance == expected, "weird balance winner");
             require(nftbig.balanceOf(bidders[i]) == 1, "should have 1 nft");
         }

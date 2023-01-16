@@ -52,7 +52,7 @@ contract BotThisTest is Test, IBotThisErrors {
             //console.log(bidderName, bidderAddy, bidderAddy.balance);
         }
         nft = new BotThis("BotThis", "BT", 2, 3);
-        nftbig = new BotThis("BotThis2", "BT2", 69, 511);
+        nftbig = new BotThis("BotThis2", "BT2", 69, 255);
     }
 
     function testHappyCase() public {
