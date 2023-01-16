@@ -7,9 +7,6 @@ import "@solbase/utils/SafeTransferLib.sol";
 import "@solbase/utils/LibString.sol";
 import {ERC721} from "./ERC721.sol";
 import {IBotThisErrors} from "./IBotThisErrors.sol";
-import "@solbase/utils/SSTORE2.sol";
-
-import "forge-std/Test.sol";
 
 // Simplified version of BotThis where every wallet can only bid on one NFT
 contract BotThisSimple is Owned(tx.origin), ReentrancyGuard, ERC721, IBotThisErrors {

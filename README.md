@@ -26,23 +26,6 @@ cd bot-this
 forge test
 ```
 
-## Blueprint
-
-```ml
-lib
-├─ forge-std — https://github.com/foundry-rs/forge-std
-├─ solbase — https://github.com/Sol-DAO/solbase
-scripts
-├─ Deploy.s.sol — Simple deployment script
-src
-├─ BotThis — The NFT contract implementing the full VCG auction
-├─ BotThisSimple — The NFT contract implementing a simplified auction
-├─ ERC721 — Minimally modified ERC721 base from solbase
-├─ IBotThisErrors — Custom errors
-test
-└─ BotThis.t — Tests
-```
-
 ## Overview of Operations
 
 The two contracts are pretty similar. At deployment time we specify the size of the collection (and the amount of top bidders for 
@@ -65,6 +48,23 @@ After the auction is finalized, winners of the auction can `mint` their NFTs. Ev
 What about bidders who lost their _salt_ or could not otherwise reveal their bid. These folks can call `emergencyReveal` after the auction has been finalized. This marks the bid as revealed which allows the user to call `withdrawCollateral`. Therefore users who could not reveal their bid on time do not lose their collateral but also do not participate in the finalization of the auction so they cannot win any NFTs.
 
 Currently, if the collection is not sold out via the auction it is impossible to mint the remaining NFTs. It is easy to modify the contract to include a period after which any remaining NFTs can be minted by anyone at the reserve price (or another price).
+
+## Blueprint
+
+```ml
+lib
+├─ forge-std — https://github.com/foundry-rs/forge-std
+├─ solbase — https://github.com/Sol-DAO/solbase
+scripts
+├─ Deploy.s.sol — Simple deployment script
+src
+├─ BotThis — The NFT contract implementing the full VCG auction
+├─ BotThisSimple — The NFT contract implementing a simplified auction
+├─ ERC721 — Minimally modified ERC721 base from solbase
+├─ IBotThisErrors — Custom errors
+test
+└─ BotThis.t — Tests
+```
 
 ## License
 

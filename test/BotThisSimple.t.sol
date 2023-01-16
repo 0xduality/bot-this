@@ -42,7 +42,6 @@ contract BotThisSimpleTest is Test, IBotThisErrors {
     }
 
     function setUp() public {
-        //nft = new BotThisSimple("BotThisSimple", "BTS");
         nft = new BotThisSimple("BotThisSimple", "BTS", 2);
         nftbig = new BotThisSimple("BotThis2", "BT2", 10000);
 
@@ -53,7 +52,6 @@ contract BotThisSimpleTest is Test, IBotThisErrors {
             bidders.push(bidderAddy);
             vm.label(bidderAddy, bidderName);
             vm.deal(bidderAddy, 10 ether);
-            //console.log(bidderName, bidderAddy, bidderAddy.balance);
         }
     }
 
@@ -592,7 +590,6 @@ contract BotThisSimpleTest is Test, IBotThisErrors {
         vm.prank(deployer);
         nft.finalizeAuction();
         for (i = 0; i < 6; ++i) {
-            //(uint96 payment, uint8 amount) = nft.outcomes(bidders[i]);
             mint(bidders[i], nft);
         }
         for (i = 0; i < 4; ++i) {
@@ -671,7 +668,6 @@ contract BotThisSimpleTest is Test, IBotThisErrors {
         nft.finalizeAuction();
 
         for (i = 0; i < 6; ++i) {
-            //(uint96 payment, uint8 amount) = nft.outcomes(bidders[p[i]]);
             mint(bidders[p[i]], nft);
         }
         for (i = 0; i < 4; ++i) {
@@ -707,7 +703,7 @@ contract BotThisSimpleTest is Test, IBotThisErrors {
         uint96[] memory bidValue = new uint96[](11000);
 
         for (uint256 i = 0; i < 11000; ++i) {
-            bidValue[i] = uint96(1 + i); //uint96(bytes11(keccak256(abi.encodePacked(bidders[i])))) % maxvalue;
+            bidValue[i] = uint96(1 + i);
         }
 
         uint96 reservePrice = 1;
