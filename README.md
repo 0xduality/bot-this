@@ -1,13 +1,16 @@
 # bot-this • ![license](https://img.shields.io/github/license/0xduality/bot-this?label=license) ![solidity](https://img.shields.io/badge/solidity-^0.8.16-lightgrey)
 
 ERC721 compatible contracts that award NFTs based on a [VCG auction](https://en.wikipedia.org/wiki/Vickrey%E2%80%93Clarke%E2%80%93Groves_auction). 
-VCG auctions ensure that auctioned goods are given to those that value them the most.
+VCG auctions are sealed bid auctions that ensure that auctioned goods are given to those that value them the most.
 In a VCG auction a bidder cannot profit by bidding something other than their true value.
+
+The sealed bid nature of the auction ensures that people do not feel compelled to bid above what they think is fair value.
+Happy buyers may not be maximizing your short term profit but can help with building a strong community.
 
 This repository contains two contracts: `BotThis` and `BotThisSimple`. The difference between the two is that  
 `BotThis` allows specifying the amount of NFTs each bidder wants while `BotThisSimple` assumes one NFT per bidder (wallet).
 `BotThis` runs a true VCG auction, while in `BotThisSimple` the VCG auction reduces to a simple auction where
-in a collection with `N` items all winners winners pay the price of the `N+1`-st bid.
+all winners pay the price of the `N+1`-st bid for a collection with `N` items.
 
 However, the additional flexibility of `BotThis` comes with substantial complexity of implementation. 
 Determining the winners of the auction and their payments in `BotThis` requires substantially more gas
@@ -64,6 +67,7 @@ src
 ├─ IBotThisErrors — Custom errors
 test
 └─ BotThis.t — Tests
+└─ BotThisSimple.t — Tests
 ```
 
 ## License
